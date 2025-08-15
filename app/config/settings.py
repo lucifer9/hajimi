@@ -18,6 +18,9 @@ GEMINI_API_KEYS = os.environ.get("GEMINI_API_KEYS", "")
 # 假流式是否开启
 FAKE_STREAMING = os.environ.get("FAKE_STREAMING", "true").lower() in ["true", "1", "yes"]
 
+# Encrypt-Full功能配置
+ENABLE_ENCRYPT_FULL_SUFFIX = os.environ.get("ENABLE_ENCRYPT_FULL_SUFFIX", "true").lower() in ["true", "1", "yes"]
+
 # 配置持久化存储目录
 STORAGE_DIR = os.environ.get("STORAGE_DIR", "/hajimi/settings/")
 ENABLE_STORAGE = os.environ.get("ENABLE_STORAGE", "false").lower() in ["true", "1", "yes"]

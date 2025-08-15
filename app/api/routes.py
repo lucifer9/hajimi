@@ -99,7 +99,16 @@ async def aistudio_list_models(_ = Depends(custom_verify_password),
         filtered_models = [model for model in GeminiClient.AVAILABLE_MODELS if model in settings.WHITELIST_MODELS]
     else:
         filtered_models = [model for model in GeminiClient.AVAILABLE_MODELS if model not in settings.BLOCKED_MODELS]
-    return ModelList(data=[{"id": model, "object": "model", "created": 1678888888, "owned_by": "organization-owner"} for model in filtered_models])
+    
+    # 为每个基础模型添加encrypt-full变体
+    extended_models = []
+    for model in filtered_models:
+        extended_models.append(model)
+        # 添加encrypt-full变体
+        encrypt_full_model = f"{model}-encrypt-full"
+        extended_models.append(encrypt_full_model)
+    
+    return ModelList(data=[{"id": model, "object": "model", "created": 1678888888, "owned_by": "organization-owner"} for model in extended_models])
 
 @router.get("/vertex/models",response_model=ModelList)
 async def vertex_list_models(request: Request, 

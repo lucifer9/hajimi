@@ -9,6 +9,12 @@ import string
 import app.config.settings as settings
 
 from app.utils.logging import log
+from app.utils.encryption import (
+    apply_encrypt_full_processing, 
+    deobfuscate_text, 
+    message_has_image,
+    get_encrypt_full_system_instruction
+)
 
 def generate_secure_random_string(length):
     all_characters = string.ascii_letters + string.digits
@@ -22,8 +28,10 @@ class GeneratedText:
 
 
 class GeminiResponseWrapper:
-    def __init__(self, data: Dict[Any, Any]):  
+    def __init__(self, data: Dict[Any, Any], model_name: str = "gemini"):  
         self._data = data
+        self._model = model_name
+        self._is_encrypt_full = model_name.endswith("-encrypt-full")
         self._text = self._extract_text()
         self._finish_reason = self._extract_finish_reason()
         self._prompt_token_count = self._extract_prompt_token_count()
@@ -32,14 +40,17 @@ class GeminiResponseWrapper:
         self._thoughts = self._extract_thoughts()
         self._function_call = self._extract_function_call()
         self._json_dumps = json.dumps(self._data, indent=4, ensure_ascii=False)
-        self._model = "gemini"
 
     def _extract_thoughts(self) -> Optional[str]:
         try:
+            thoughts_text = ""
             for part in self._data['candidates'][0]['content']['parts']:
                 if 'thought' in part:
-                    return part['text']
-            return ""
+                    thoughts_text += part['text']
+            # 如果是encrypt-full模式，应用去混淆处理
+            if self._is_encrypt_full and thoughts_text:
+                thoughts_text = deobfuscate_text(thoughts_text)
+            return thoughts_text if thoughts_text else ""
         except (KeyError, IndexError):
             return ""
 
@@ -49,6 +60,9 @@ class GeminiResponseWrapper:
             for part in self._data['candidates'][0]['content']['parts']:
                 if 'thought' not in part and 'text' in part:
                     text += part['text']
+            # 如果是encrypt-full模式，应用去混淆处理
+            if self._is_encrypt_full:
+                text = deobfuscate_text(text)
             return text
         except (KeyError, IndexError):
             return ""
@@ -146,8 +160,34 @@ class GeminiClient:
 
     # 请求参数处理
     def _convert_request_data(self, request, contents, safety_settings, system_instruction):
+        # 检测encrypt-full模式
+        is_encrypt_full = request.model.endswith("-encrypt-full")
+        
+        if is_encrypt_full:
+            # 如果包含图像，跳过加密处理
+            if message_has_image(request.messages):
+                log('INFO', "检测到图像内容，跳过encrypt-full处理", extra={'model': request.model})
+            else:
+                # 应用encrypt-full处理
+                processed_messages, encrypt_instruction = apply_encrypt_full_processing(request)
+                if processed_messages and encrypt_instruction:
+                    log('INFO', "应用encrypt-full处理", extra={'model': request.model})
+                    # 更新系统指令
+                    system_instruction = encrypt_instruction
+                    # 重新转换消息
+                    temp_request = type(request)(
+                        model=request.model,
+                        messages=processed_messages,
+                        **{k: v for k, v in request.__dict__.items() if k not in ['model', 'messages']}
+                    )
+                    contents, _ = self.convert_messages(temp_request.messages, model=request.model)
+        
+        # 获取基础模型名（去除后缀）
+        base_model = request.model
+        if is_encrypt_full:
+            base_model = request.model.removesuffix("-encrypt-full")
 
-        model = request.model
+        model = base_model
         format_type = getattr(request, 'format_type', None)
         if format_type and (format_type == "gemini"):
             api_version = "v1alpha" if "think" in request.model else "v1beta"
@@ -334,7 +374,7 @@ class GeminiClient:
                 response = await client.post(url, headers=headers, json=data, timeout=600) 
                 response.raise_for_status() # 检查 HTTP 错误状态
             
-            return GeminiResponseWrapper(response.json())
+            return GeminiResponseWrapper(response.json(), request.model)
         except Exception as e:
             raise
 
