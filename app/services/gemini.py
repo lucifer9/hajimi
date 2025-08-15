@@ -11,6 +11,7 @@ import app.config.settings as settings
 from app.utils.logging import log
 from app.utils.encryption import (
     apply_encrypt_full_processing, 
+    apply_encrypt_full_processing_ai_request,
     deobfuscate_text, 
     message_has_image,
     get_encrypt_full_system_instruction
@@ -163,7 +164,10 @@ class GeminiClient:
         # 检测encrypt-full模式
         is_encrypt_full = request.model.endswith("-encrypt-full")
         
-        if is_encrypt_full:
+        # 检查request是否有messages属性（ChatCompletionRequest vs AIRequest）
+        has_messages = hasattr(request, 'messages')
+        
+        if is_encrypt_full and has_messages:
             # 如果包含图像，跳过加密处理
             if message_has_image(request.messages):
                 log('INFO', "检测到图像内容，跳过encrypt-full处理", extra={'model': request.model})
@@ -181,6 +185,20 @@ class GeminiClient:
                         **{k: v for k, v in request.__dict__.items() if k not in ['model', 'messages']}
                     )
                     contents, _ = self.convert_messages(temp_request.messages, model=request.model)
+        elif is_encrypt_full and not has_messages:
+            # 对于AIRequest对象（native Gemini格式），应用专门的encrypt-full处理
+            try:
+                updated_payload, encrypt_instruction = apply_encrypt_full_processing_ai_request(request)
+                if updated_payload and encrypt_instruction:
+                    log('INFO', "AIRequest对象应用encrypt-full处理", extra={'model': request.model})
+                    # 更新request的payload和系统指令
+                    request.payload = updated_payload
+                    system_instruction = encrypt_instruction
+                else:
+                    log('INFO', "AIRequest对象跳过encrypt-full处理（包含图像或其他原因）", extra={'model': request.model})
+            except Exception as e:
+                log('ERROR', f"AIRequest encrypt-full处理失败: {str(e)}", extra={'model': request.model})
+                # 失败时继续正常处理
         
         # 获取基础模型名（去除后缀）
         base_model = request.model
