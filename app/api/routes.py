@@ -353,6 +353,10 @@ async def gemini_chat_completions(
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的请求路径")
     
+    # 如果启用原生API加密，自动添加encrypt-full后缀
+    if settings.NATIVE_API_ENCRYPT_FULL:
+        model_name = f"{model_name}-encrypt-full"
+    
     geminiRequest = AIRequest(payload=payload,model=model_name,stream=is_stream,format_type='gemini')
     return await aistudio_chat_completions(geminiRequest, request, _dp, _du)
         

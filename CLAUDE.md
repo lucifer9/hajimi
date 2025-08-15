@@ -74,6 +74,7 @@ Main settings are configured via environment variables in `app/config/settings.p
 - `CONCURRENT_REQUESTS`: Number of concurrent requests (default: 1)
 - `ENABLE_VERTEX`: Enable Vertex AI mode (default: false)
 - `MAX_REQUESTS_PER_MINUTE`: Rate limiting (default: 30)
+- `NATIVE_API_ENCRYPT_FULL`: Enable encrypt-full mode for native Gemini API (default: false)
 
 ### API Endpoints
 The service provides OpenAI-compatible endpoints:
