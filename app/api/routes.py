@@ -152,7 +152,9 @@ async def aistudio_chat_completions(
         settings.MAX_REQUESTS_PER_MINUTE, 
         settings.MAX_REQUESTS_PER_DAY_PER_IP)
     
-    if request.model not in GeminiClient.AVAILABLE_MODELS:
+    # 验证模型是否可用（处理encrypt-full后缀）
+    base_model = request.model.removesuffix("-encrypt-full")
+    if base_model not in GeminiClient.AVAILABLE_MODELS:
         log('error', "无效的模型", 
             extra={'model': request.model, 'status_code': 400})
         raise HTTPException(
