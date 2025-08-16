@@ -89,8 +89,15 @@ async function submitApiKeys() {
     return
   }
   
-  // 验证API密钥格式
-  const keys = newApiKeys.value.split(',').map(key => key.trim()).filter(key => key)
+  // 验证API密钥格式 - 支持换行符分隔和逗号分隔
+  const allKeys = []
+  for (const line of newApiKeys.value.split('\n')) {
+    const lineKeys = line.split(',').map(key => key.trim()).filter(key => key)
+    allKeys.push(...lineKeys)
+  }
+  
+  // 去重
+  const keys = [...new Set(allKeys)]
   if (keys.length === 0) {
     apiKeyError.value = '请输入至少一个有效的API密钥'
     return
@@ -483,11 +490,11 @@ const totalTokens = computed(() => {
     <transition name="slide">
       <div v-if="showApiKeyInput" class="api-key-input-form">
         <div class="form-group">
-          <label for="newApiKeys">API密钥 (以逗号分隔)</label>
+          <label for="newApiKeys">API密钥 (支持逗号分隔或每行一个)</label>
           <textarea 
             id="newApiKeys" 
             v-model="newApiKeys" 
-            placeholder="在此输入API密钥，多个密钥请用逗号分隔（注意：如果您使用的是云部署方案或您没有配置持久化，在此处配置的api密钥在重启后会丢失）"
+            placeholder="在此输入API密钥，支持两种格式：&#10;1. 逗号分隔：key1,key2,key3&#10;2. 每行一个：&#10;   key1&#10;   key2&#10;   key3&#10;（注意：如果您使用的是云部署方案或您没有配置持久化，在此处配置的api密钥在重启后会丢失）"
             :disabled="isSubmitting"
             rows="3"
             class="api-key-textarea"
