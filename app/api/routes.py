@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from app.services import GeminiClient
 from app.utils import protect_from_abuse,generate_cache_key,openAI_from_text,log
 from app.utils.response import openAI_from_Gemini
-from app.utils.auth import custom_verify_password
+from app.utils.auth import custom_verify_password, verify_gemini_auth
 from .stream_handlers import process_stream_request
 from .nonstream_handlers import process_request, process_nonstream_with_keepalive_stream
 from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse, ModelList, AIRequest, ChatRequestGemini
@@ -131,9 +131,17 @@ async def list_models(request: Request,
 async def aistudio_chat_completions(
     request: Union[ChatCompletionRequest, AIRequest],
     http_request: Request,
-    _ = Depends(custom_verify_password),
+    auth_param = Depends(custom_verify_password),
     _2 = Depends(verify_user_agent),
 ):
+    # 处理认证参数，提取优先密钥
+    priority_key = None
+    if isinstance(auth_param, tuple):
+        # 来自 verify_gemini_auth 的返回值
+        auth_type, client_key = auth_param
+        if auth_type == "gemini_key":
+            priority_key = await key_manager.add_client_key_if_new(client_key)
+    
     format_type = getattr(request, 'format_type', None)
     if format_type and (format_type == "gemini"):
         is_gemini = True
@@ -215,7 +223,8 @@ async def aistudio_chat_completions(
                 response_cache_manager = response_cache_manager,
                 safety_settings = safety_settings,
                 safety_settings_g2 = safety_settings_g2,
-                cache_key = cache_key
+                cache_key = cache_key,
+                priority_key = priority_key
             )
         )
     
@@ -231,7 +240,8 @@ async def aistudio_chat_completions(
                     safety_settings = safety_settings,
                     safety_settings_g2 = safety_settings_g2,
                     cache_key = cache_key,
-                    is_gemini = is_gemini
+                    is_gemini = is_gemini,
+                    priority_key = priority_key
                 )
             )
         else:
@@ -243,7 +253,8 @@ async def aistudio_chat_completions(
                     response_cache_manager = response_cache_manager,
                     safety_settings = safety_settings,
                     safety_settings_g2 = safety_settings_g2,
-                    cache_key = cache_key
+                    cache_key = cache_key,
+                    priority_key = priority_key
                 )
             )
 
@@ -325,10 +336,18 @@ async def chat_completions(
 @router.get("/gemini/v1beta/models")
 @router.get("/gemini/v1/models")
 async def gemini_list_models(request: Request,
-                             _ = Depends(custom_verify_password),
+                             auth_result = Depends(verify_gemini_auth),
                              _2 = Depends(verify_user_agent)):
     """ gemini 端点的模型获取 """
-    api_key = await key_manager.get_available_key()
+    auth_type, client_key = auth_result
+    
+    if auth_type == "gemini_key":
+        # 使用客户端密钥并添加到池中
+        api_key = await key_manager.add_client_key_if_new(client_key)
+    else:
+        # 使用密钥池
+        api_key = await key_manager.get_available_key()
+    
     if not api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No valid API keys available.")
    
@@ -341,7 +360,7 @@ async def gemini_chat_completions(
     key: Optional[str] = Query(None),
     alt: Optional[str] = Query(None, description=" sse 或 None"),
     payload: ChatRequestGemini = Body(...),
-    _dp = Depends(custom_verify_password),
+    auth_result = Depends(verify_gemini_auth),
     _du = Depends(verify_user_agent),
 ):
     # 提取路径参数
@@ -360,5 +379,5 @@ async def gemini_chat_completions(
         model_name = f"{model_name}-encrypt-full"
     
     geminiRequest = AIRequest(payload=payload,model=model_name,stream=is_stream,format_type='gemini')
-    return await aistudio_chat_completions(geminiRequest, request, _dp, _du)
+    return await aistudio_chat_completions(geminiRequest, request, auth_result, _du)
         

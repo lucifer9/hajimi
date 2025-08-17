@@ -32,7 +32,17 @@ class APIKeyManager:
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
 
-    async def get_available_key(self):
+    async def add_client_key_if_new(self, client_key: str):
+        """将客户端密钥添加到池中（去重）"""
+        async with self.lock:
+            if client_key not in self.api_keys:
+                self.api_keys.append(client_key)
+                self._reset_key_stack()
+                log_msg = format_log_message('INFO', f"已添加客户端API密钥到池中: {client_key[:8]}...")
+                logger.info(log_msg)
+            return client_key
+
+    async def get_available_key(self, priority_key: str = None):
         """从栈顶获取密钥，若栈空则重新生成
         
         实现负载均衡：
@@ -40,7 +50,12 @@ class APIKeyManager:
         2. 每次调用从栈顶取出一个key返回
         3. 栈空时重新随机生成栈
         4. 确保异步和并发安全
+        5. 支持优先密钥，如果提供则直接返回
         """
+        # 如果有优先密钥，直接返回
+        if priority_key:
+            return priority_key
+            
         async with self.lock:
             # 如果栈为空，重新生成
             if not self.key_stack:

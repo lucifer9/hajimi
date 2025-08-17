@@ -203,7 +203,8 @@ async def process_request(
     response_cache_manager,
     safety_settings,
     safety_settings_g2,
-    cache_key: str
+    cache_key: str,
+    priority_key: str = None
 ):
     """处理非流式请求"""
     global current_api_key
@@ -239,7 +240,7 @@ async def process_request(
         
         # 尝试获取足够数量的有效密钥
         while len(valid_keys) < batch_num:
-            api_key = await key_manager.get_available_key()
+            api_key = await key_manager.get_available_key(priority_key)
             if not api_key:
                 break
                 
@@ -264,7 +265,7 @@ async def process_request(
                 extra={'request_type': 'non-stream', 'model': chat_request.model})
             key_manager._reset_key_stack()
             # 重置后重新获取一个密钥
-            api_key = await key_manager.get_available_key()
+            api_key = await key_manager.get_available_key(priority_key)
             if api_key:
                 valid_keys = [api_key]
         
@@ -385,7 +386,8 @@ async def process_nonstream_with_keepalive_stream(
     safety_settings,
     safety_settings_g2,
     cache_key: str,
-    is_gemini: bool
+    is_gemini: bool,
+    priority_key: str = None
 ):
     """处理带保活的非流式请求，使用流式响应发送保活消息但最终返回非流式格式"""
     from fastapi.responses import StreamingResponse
@@ -423,7 +425,7 @@ async def process_nonstream_with_keepalive_stream(
                 
                 # 尝试获取足够数量的有效密钥
                 while len(valid_keys) < batch_num:
-                    api_key = await key_manager.get_available_key()
+                    api_key = await key_manager.get_available_key(priority_key)
                     if not api_key:
                         break
                         
@@ -448,7 +450,7 @@ async def process_nonstream_with_keepalive_stream(
                         extra={'request_type': 'non-stream', 'model': chat_request.model})
                     key_manager._reset_key_stack()
                     # 重置后重新获取一个密钥
-                    api_key = await key_manager.get_available_key()
+                    api_key = await key_manager.get_available_key(priority_key)
                     if api_key:
                         valid_keys = [api_key]
                 

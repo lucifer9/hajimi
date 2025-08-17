@@ -14,7 +14,8 @@ async def stream_response_generator(
     response_cache_manager,
     safety_settings,
     safety_settings_g2,
-    cache_key: str
+    cache_key: str,
+    priority_key: str = None
 ):
     format_type = getattr(chat_request, 'format_type', None)
     if format_type and (format_type == "gemini"):
@@ -360,7 +361,8 @@ async def process_stream_request(
     response_cache_manager,
     safety_settings,
     safety_settings_g2,
-    cache_key: str
+    cache_key: str,
+    priority_key: str = None
 ) -> StreamingResponse:
     """处理流式API请求"""
     
@@ -370,5 +372,6 @@ async def process_stream_request(
                 response_cache_manager,
                 safety_settings,
                 safety_settings_g2,
-                cache_key
+                cache_key,
+                priority_key
             ), media_type="text/event-stream")
