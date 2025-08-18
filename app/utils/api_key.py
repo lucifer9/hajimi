@@ -32,15 +32,16 @@ class APIKeyManager:
         random.shuffle(shuffled_keys)
         self.key_stack = shuffled_keys
 
-    async def add_client_key_if_new(self, client_key: str):
-        """将客户端密钥添加到池中（去重）"""
+    async def add_successful_client_key(self, client_key: str):
+        """在请求成功后将客户端密钥添加到池中（去重）"""
         async with self.lock:
             if client_key not in self.api_keys:
                 self.api_keys.append(client_key)
                 self._reset_key_stack()
-                log_msg = format_log_message('INFO', f"已添加客户端API密钥到池中: {client_key[:8]}...")
+                log_msg = format_log_message('INFO', f"已添加成功验证的客户端API密钥到池中: {client_key[:8]}...")
                 logger.info(log_msg)
-            return client_key
+                return True
+            return False
 
     async def get_available_key(self, priority_key: str = None):
         """从栈顶获取密钥，若栈空则重新生成

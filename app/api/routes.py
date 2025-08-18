@@ -140,7 +140,8 @@ async def aistudio_chat_completions(
         # 来自 verify_gemini_auth 的返回值
         auth_type, client_key = auth_param
         if auth_type == "gemini_key":
-            priority_key = await key_manager.add_client_key_if_new(client_key)
+            # 直接使用客户端密钥作为优先密钥（仅在请求成功后才会添加到池中）
+            priority_key = client_key
     
     format_type = getattr(request, 'format_type', None)
     if format_type and (format_type == "gemini"):
@@ -342,8 +343,8 @@ async def gemini_list_models(request: Request,
     auth_type, client_key = auth_result
     
     if auth_type == "gemini_key":
-        # 使用客户端密钥并添加到池中
-        api_key = await key_manager.add_client_key_if_new(client_key)
+        # 直接使用客户端密钥（不立即添加到池中）
+        api_key = client_key
     else:
         # 使用密钥池
         api_key = await key_manager.get_available_key()
@@ -351,7 +352,15 @@ async def gemini_list_models(request: Request,
     if not api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No valid API keys available.")
    
-    return await GeminiClient.list_native_models(api_key)
+    try:
+        result = await GeminiClient.list_native_models(api_key)
+        # 如果使用客户端密钥且请求成功，将其添加到密钥池中
+        if auth_type == "gemini_key":
+            await key_manager.add_successful_client_key(api_key)
+        return result
+    except Exception as e:
+        # 客户端密钥请求失败，不添加到池中
+        raise e
 
 @router.post("/gemini/{api_version:str}/models/{model_and_responseType:path}")
 async def gemini_chat_completions(

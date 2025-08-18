@@ -47,7 +47,7 @@ async def stream_response_generator(
         
         # 尝试获取足够数量的有效密钥
         while len(valid_keys) < batch_num:
-            api_key = await key_manager.get_available_key()
+            api_key = await key_manager.get_available_key(priority_key)
             if not api_key:
                 break
                 
@@ -72,7 +72,7 @@ async def stream_response_generator(
                 extra={'request_type': 'stream', 'model': chat_request.model})
             key_manager._reset_key_stack()
             # 重置后重新获取一个密钥
-            api_key = await key_manager.get_available_key()
+            api_key = await key_manager.get_available_key(priority_key)
             if api_key:
                 valid_keys = [api_key]
         
@@ -217,7 +217,7 @@ async def stream_response_generator(
                 extra={'request_type': 'stream', 'model': chat_request.model})
             key_manager._reset_key_stack()
             # 重置后重新获取一个密钥
-            api_key = await key_manager.get_available_key()
+            api_key = await key_manager.get_available_key(priority_key)
             if api_key:
                 valid_keys = [api_key]
         
@@ -286,6 +286,9 @@ async def stream_response_generator(
                     model=chat_request.model,
                     token=token
                 )
+                # 如果使用的是客户端提供的优先密钥且请求成功，将其添加到密钥池中
+                if priority_key and api_key == priority_key:
+                    await key_manager.add_successful_client_key(api_key)
                 return
             
             # 如果空响应次数达到限制，跳出循环

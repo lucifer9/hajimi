@@ -333,6 +333,9 @@ async def process_request(
                         success = True
                         log('info', f"非流式请求成功", 
                             extra={'key': api_key[:8],'request_type': 'non-stream', 'model': chat_request.model})
+                        # 如果使用的是客户端提供的优先密钥且请求成功，将其添加到密钥池中
+                        if priority_key and api_key == priority_key:
+                            await key_manager.add_successful_client_key(api_key)
                         cached_response, cache_hit = await  response_cache_manager.get_and_remove(cache_key)
                         if is_gemini :
                             return cached_response.data
@@ -514,6 +517,9 @@ async def process_nonstream_with_keepalive_stream(
                                 success = True
                                 log('info', f"非流式请求成功", 
                                     extra={'key': api_key[:8],'request_type': 'non-stream', 'model': chat_request.model})
+                                # 如果使用的是客户端提供的优先密钥且请求成功，将其添加到密钥池中
+                                if priority_key and api_key == priority_key:
+                                    await key_manager.add_successful_client_key(api_key)
                                 cached_response, cache_hit = await response_cache_manager.get_and_remove(cache_key)
                                 
                                 # 发送最终的非流式响应
