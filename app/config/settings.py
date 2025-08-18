@@ -10,6 +10,10 @@ import asyncio
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "7860"))
 
+# API上游地址配置
+GEMINI_API_BASE_URL = os.environ.get("GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com")
+VERTEX_API_BASE_URL = os.environ.get("VERTEX_API_BASE_URL", "https://aiplatform.googleapis.com")
+
 # 调用本项目时使用的密码
 PASSWORD = os.environ.get("PASSWORD", "123").strip('"') 
 

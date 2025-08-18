@@ -211,8 +211,9 @@ async def chat_completions(fastapi_request: Request, request: OpenAIRequest, api
 
             PROJECT_ID = rotated_project_id
             LOCATION = "global" # Fixed as per user confirmation
+            import app.config.settings as settings
             VERTEX_AI_OPENAI_ENDPOINT_URL = (
-                f"https://aiplatform.googleapis.com/v1beta1/"
+                f"{settings.VERTEX_API_BASE_URL}/v1beta1/"
                 f"projects/{PROJECT_ID}/locations/{LOCATION}/endpoints/openapi"
             )
             # base_model_name is already extracted (e.g., "gemini-1.5-pro-exp-v1")
