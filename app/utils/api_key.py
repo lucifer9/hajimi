@@ -11,12 +11,22 @@ logger = logging.getLogger("my_logger")
 
 class APIKeyManager:
     def __init__(self):
-        self.api_keys = re.findall(
-            r"AIzaSy[a-zA-Z0-9_-]{33}", settings.GEMINI_API_KEYS)
-        # 加载更多 GEMINI_API_KEYS
+        # 检查是否启用存储，如果禁用存储则跳过格式检查
+        if settings.ENABLE_STORAGE:
+            # 启用存储时使用严格格式检查（保持原逻辑）
+            self.api_keys = re.findall(
+                r"AIzaSy[a-zA-Z0-9_-]{33}", settings.GEMINI_API_KEYS)
+        else:
+            # 禁用存储时使用宽松解析（解决当前问题）
+            self.api_keys = [key.strip() for key in settings.GEMINI_API_KEYS.split(',') if key.strip()]
+        
+        # 加载更多 GEMINI_API_KEYS，应用同样的逻辑
         for i in range(1, 99):
             if keys := os.environ.get(f"GEMINI_API_KEYS_{i}", ""):
-                self.api_keys += re.findall(r"AIzaSy[a-zA-Z0-9_-]{33}", keys)
+                if settings.ENABLE_STORAGE:
+                    self.api_keys += re.findall(r"AIzaSy[a-zA-Z0-9_-]{33}", keys)
+                else:
+                    self.api_keys += [key.strip() for key in keys.split(',') if key.strip()]
             else:
                 break
 
