@@ -68,6 +68,8 @@ app/
 
 ### Environment Configuration
 Main settings are configured via environment variables in `app/config/settings.py`:
+- `HOST`: Server listen address (default: "0.0.0.0")
+- `PORT`: Server listen port (default: 7860)
 - `GEMINI_API_KEYS`: Comma-separated Gemini API keys
 - `PASSWORD`: API access password (default: "123")
 - `FAKE_STREAMING`: Enable fake streaming (default: true)

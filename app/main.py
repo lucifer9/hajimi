@@ -280,8 +280,9 @@ def open_browser():
         browser = webbrowser.get()
         if browser:
             log('info', f"找到可用浏览器: {browser.name}。准备打开 URL...")
-            webbrowser.open("http://127.0.0.1:7860")
-            log('info', "已发送打开浏览器指令: http://127.0.0.1:7860")
+            browser_url = f"http://127.0.0.1:{settings.PORT}"
+            webbrowser.open(browser_url)
+            log('info', f"已发送打开浏览器指令: {browser_url}")
         else:
             # 这种情况很少见，但作为备用逻辑
             log('warning', "webbrowser.get() 未返回浏览器实例，跳过打开浏览器。")

@@ -6,6 +6,10 @@ import asyncio
 
 # ---------- 以下是基础配置信息 ----------
 
+# 服务器监听地址和端口配置
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "7860"))
+
 # 调用本项目时使用的密码
 PASSWORD = os.environ.get("PASSWORD", "123").strip('"') 
 
