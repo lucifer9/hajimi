@@ -9,4 +9,4 @@ RUN uv pip install --system --no-cache-dir -r requirements.txt
 
 EXPOSE 7860
 
-CMD ["uvicorn", "app.main:app"]
+CMD ["sh", "-c", "uvicorn app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-7860}"]
