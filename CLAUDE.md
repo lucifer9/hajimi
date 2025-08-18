@@ -92,9 +92,14 @@ The service supports HTTP, HTTPS, and SOCKS5 proxies for upstream requests:
 - **HTTPS Proxy with auth**: `HTTPS_PROXY=https://user:pass@proxy.example.com:8080`
 - **SOCKS5 Proxy**: `SOCKS_PROXY=socks5://proxy.example.com:1080`
 - **SOCKS5 Proxy with auth**: `SOCKS_PROXY=socks5://user:pass@proxy.example.com:1080`
+- **SOCKS5H Proxy (remote DNS)**: `SOCKS_PROXY=socks5h://user:pass@proxy.example.com:1080`
 - **All protocols**: `ALL_PROXY=http://proxy.example.com:8080` (fallback for all protocols)
 
-Proxy priority: Protocol-specific proxy (HTTP_PROXY/HTTPS_PROXY) > SOCKS_PROXY > ALL_PROXY
+**SOCKS5 vs SOCKS5H:**
+- `socks5://` - DNS resolution is performed locally
+- `socks5h://` - DNS resolution is performed by the proxy server (recommended for IPv6 compatibility)
+
+Proxy priority: SOCKS_PROXY > HTTPS_PROXY > HTTP_PROXY > ALL_PROXY
 
 ### API Endpoints
 The service provides OpenAI-compatible endpoints:
