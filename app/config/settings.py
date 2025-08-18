@@ -14,6 +14,12 @@ PORT = int(os.environ.get("PORT", "7860"))
 GEMINI_API_BASE_URL = os.environ.get("GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com")
 VERTEX_API_BASE_URL = os.environ.get("VERTEX_API_BASE_URL", "https://aiplatform.googleapis.com")
 
+# 代理配置
+HTTP_PROXY = os.environ.get("HTTP_PROXY", "")
+HTTPS_PROXY = os.environ.get("HTTPS_PROXY", "")
+SOCKS_PROXY = os.environ.get("SOCKS_PROXY", "")
+ALL_PROXY = os.environ.get("ALL_PROXY", "")
+
 # 调用本项目时使用的密码
 PASSWORD = os.environ.get("PASSWORD", "123").strip('"') 
 

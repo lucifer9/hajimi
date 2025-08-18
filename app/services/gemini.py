@@ -9,6 +9,7 @@ import string
 import app.config.settings as settings
 
 from app.utils.logging import log
+from app.utils.http_client import create_http_client
 from app.utils.encryption import (
     apply_encrypt_full_processing, 
     apply_encrypt_full_processing_ai_request,
@@ -338,7 +339,7 @@ class GeminiClient:
             "Content-Type": "application/json",
         }
         
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             async with client.stream("POST", url, headers=headers, json=data, timeout=600) as response:
                 try:
                     # 检查响应状态码，如果不是成功，则先消费响应体再抛出异常
@@ -388,7 +389,7 @@ class GeminiClient:
         }
         
         try:
-            async with httpx.AsyncClient() as client:
+            async with create_http_client() as client:
                 response = await client.post(url, headers=headers, json=data, timeout=600) 
                 response.raise_for_status() # 检查 HTTP 错误状态
             
@@ -519,7 +520,7 @@ class GeminiClient:
     async def list_available_models(api_key) -> list:
         url = "{}/v1beta/models?key={}".format(
             settings.GEMINI_API_BASE_URL, api_key)
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
@@ -539,7 +540,7 @@ class GeminiClient:
         """
         url = "{}/v1beta/models?key={}".format(
             settings.GEMINI_API_BASE_URL, api_key)
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             response = await client.get(url)
             response.raise_for_status()
             return response.json()

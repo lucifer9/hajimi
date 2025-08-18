@@ -12,6 +12,7 @@ from app.utils import format_log_message
 import app.config.settings as settings
 
 from app.utils.logging import log
+from app.utils.http_client import create_http_client
 
 def generate_secure_random_string(length):
     all_characters = string.ascii_letters + string.digits
@@ -71,7 +72,7 @@ class OpenAIClient:
             "Authorization": f"Bearer {self.api_key}"
         }
         
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             async with client.stream("POST", url, headers=headers, json=data, timeout=600) as response:
                 buffer = b"" # 用于累积可能不完整的 JSON 数据
                 try:

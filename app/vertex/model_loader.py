@@ -3,6 +3,7 @@ import asyncio
 import json
 from typing import List, Dict, Optional, Any
 from app.utils.logging import vertex_log
+from app.utils.http_client import create_http_client
 
 # 导入settings和app_config
 from app.config import settings
@@ -42,7 +43,7 @@ async def fetch_and_parse_models_config() -> Optional[Dict[str, List[str]]]:
     
     for retry in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:  # 增加超时时间
+            async with create_http_client(timeout=30.0) as client:  # 增加超时时间
                 vertex_log('info', f"尝试获取模型配置，第{retry+1}次尝试")
                 response = await client.get(models_config_url)
                 response.raise_for_status()  # Raise an exception for HTTP errors

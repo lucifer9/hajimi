@@ -94,8 +94,9 @@ async def test_api_key(api_key: str) -> bool:
     try:
         import httpx
         import app.config.settings as settings
+        from app.utils.http_client import create_http_client
         url = "{}/v1beta/models?key={}".format(settings.GEMINI_API_BASE_URL, api_key)
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             response = await client.get(url)
             response.raise_for_status()
             return True

@@ -72,6 +72,10 @@ Main settings are configured via environment variables in `app/config/settings.p
 - `PORT`: Server listen port (default: 7860)
 - `GEMINI_API_BASE_URL`: Gemini API upstream address (default: "https://generativelanguage.googleapis.com")
 - `VERTEX_API_BASE_URL`: Vertex AI API upstream address (default: "https://aiplatform.googleapis.com")
+- `HTTP_PROXY`: HTTP proxy address (e.g., "http://proxy.example.com:8080")
+- `HTTPS_PROXY`: HTTPS proxy address (e.g., "https://user:pass@proxy.example.com:8080")
+- `SOCKS_PROXY`: SOCKS5 proxy address (e.g., "socks5://user:pass@proxy.example.com:1080")
+- `ALL_PROXY`: Fallback proxy for all protocols
 - `GEMINI_API_KEYS`: Comma-separated Gemini API keys
 - `PASSWORD`: API access password (default: "123")
 - `FAKE_STREAMING`: Enable fake streaming (default: true)
@@ -79,6 +83,18 @@ Main settings are configured via environment variables in `app/config/settings.p
 - `ENABLE_VERTEX`: Enable Vertex AI mode (default: false)
 - `MAX_REQUESTS_PER_MINUTE`: Rate limiting (default: 30)
 - `NATIVE_API_ENCRYPT_FULL`: Enable encrypt-full mode for native Gemini API (default: false)
+
+#### Proxy Configuration
+The service supports HTTP, HTTPS, and SOCKS5 proxies for upstream requests:
+- **HTTP Proxy**: `HTTP_PROXY=http://proxy.example.com:8080`
+- **HTTP Proxy with auth**: `HTTP_PROXY=http://user:pass@proxy.example.com:8080`
+- **HTTPS Proxy**: `HTTPS_PROXY=https://proxy.example.com:8080`
+- **HTTPS Proxy with auth**: `HTTPS_PROXY=https://user:pass@proxy.example.com:8080`
+- **SOCKS5 Proxy**: `SOCKS_PROXY=socks5://proxy.example.com:1080`
+- **SOCKS5 Proxy with auth**: `SOCKS_PROXY=socks5://user:pass@proxy.example.com:1080`
+- **All protocols**: `ALL_PROXY=http://proxy.example.com:8080` (fallback for all protocols)
+
+Proxy priority: Protocol-specific proxy (HTTP_PROXY/HTTPS_PROXY) > SOCKS_PROXY > ALL_PROXY
 
 ### API Endpoints
 The service provides OpenAI-compatible endpoints:
