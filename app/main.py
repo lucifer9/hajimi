@@ -48,6 +48,29 @@ load_settings()
 # 初始化API密钥管理器
 key_manager = APIKeyManager()
 
+# 确保环境变量中的密钥被持久化保存
+def ensure_env_keys_persisted():
+    """确保环境变量中的API密钥被保存到settings.json"""
+    if key_manager.api_keys and settings.ENABLE_STORAGE:
+        try:
+            # 更新settings中的GEMINI_API_KEYS
+            current_keys_from_settings = settings.GEMINI_API_KEYS.split(',') if settings.GEMINI_API_KEYS else []
+            current_keys_from_settings = [key.strip() for key in current_keys_from_settings if key.strip()]
+            
+            # 合并APIKeyManager中的密钥（包括从环境变量读取的）
+            all_unique_keys = list(set(current_keys_from_settings + key_manager.api_keys))
+            
+            # 只有当密钥发生变化时才更新和保存
+            if set(all_unique_keys) != set(current_keys_from_settings):
+                settings.GEMINI_API_KEYS = ','.join(all_unique_keys)
+                save_settings()
+                log('info', f"已将环境变量中的API密钥持久化保存，共{len(all_unique_keys)}个密钥")
+        except Exception as e:
+            log('warning', f"持久化环境变量API密钥时出错: {str(e)}")
+
+# 在模块加载时立即执行密钥持久化（同步方式）
+ensure_env_keys_persisted()
+
 # 创建全局缓存字典，将作为缓存管理器的内部存储
 response_cache = {}
 

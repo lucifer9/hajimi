@@ -100,7 +100,8 @@ async def stream_response_generator(
                     system_instruction, 
                     safety_settings, 
                     safety_settings_g2,
-                    cache_key
+                    cache_key,
+                    priority_key
                 )
             )
             
@@ -136,6 +137,12 @@ async def stream_response_generator(
                             success = True
                             log('info', f"假流式请求成功", 
                                 extra={'key': api_key[:8],'request_type': "fake-stream", 'model': chat_request.model})
+                            
+                            # 如果使用的是客户端提供的优先密钥且请求成功，将其添加到密钥池中
+                            if priority_key and api_key == priority_key:
+                                from app.api.routes import key_manager
+                                await key_manager.add_successful_client_key(api_key)
+                            
                             cached_response, cache_hit = await response_cache_manager.get_and_remove(cache_key)
                             if cache_hit and cached_response: 
                                 if is_gemini :
@@ -314,7 +321,7 @@ async def stream_response_generator(
         yield openAI_from_text(model=chat_request.model,content="所有API密钥均请求失败\n具体错误请查看轮询日志",finish_reason="stop")
 
 # 处理假流式模式
-async def handle_fake_streaming(api_key,chat_request, contents, response_cache_manager,system_instruction, safety_settings, safety_settings_g2, cache_key):
+async def handle_fake_streaming(api_key, chat_request, contents, response_cache_manager, system_instruction, safety_settings, safety_settings_g2, cache_key, priority_key: str = None):
     
     # 使用非流式请求内容
     gemini_client = GeminiClient(api_key)
@@ -347,6 +354,13 @@ async def handle_fake_streaming(api_key,chat_request, contents, response_cache_m
 
         # 缓存
         await response_cache_manager.store(cache_key, response_content)
+        
+        # 如果使用的是客户端提供的优先密钥且请求成功，将其添加到密钥池中
+        if priority_key and api_key == priority_key:
+            # 需要导入key_manager，从全局变量获取
+            from app.api.routes import key_manager
+            await key_manager.add_successful_client_key(api_key)
+        
         return "success"
     
     except Exception as e:

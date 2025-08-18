@@ -131,7 +131,7 @@ async def list_models(request: Request,
 async def aistudio_chat_completions(
     request: Union[ChatCompletionRequest, AIRequest],
     http_request: Request,
-    auth_param = Depends(custom_verify_password),
+    auth_param = Depends(verify_gemini_auth),
     _2 = Depends(verify_user_agent),
 ):
     # 处理认证参数，提取优先密钥

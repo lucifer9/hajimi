@@ -33,13 +33,31 @@ class APIKeyManager:
         self.key_stack = shuffled_keys
 
     async def add_successful_client_key(self, client_key: str):
-        """在请求成功后将客户端密钥添加到池中（去重）"""
+        """在请求成功后将客户端密钥添加到池中（去重），并持久化保存"""
         async with self.lock:
             if client_key not in self.api_keys:
+                # 添加到内存中的密钥池
                 self.api_keys.append(client_key)
                 self._reset_key_stack()
-                log_msg = format_log_message('INFO', f"已添加成功验证的客户端API密钥到池中: {client_key[:8]}...")
-                logger.info(log_msg)
+                
+                # 更新settings中的GEMINI_API_KEYS并持久化
+                current_keys = settings.GEMINI_API_KEYS.split(',') if settings.GEMINI_API_KEYS else []
+                current_keys = [key.strip() for key in current_keys if key.strip()]
+                
+                if client_key not in current_keys:
+                    current_keys.append(client_key)
+                    settings.GEMINI_API_KEYS = ','.join(current_keys)
+                    
+                    # 调用持久化保存
+                    try:
+                        from app.config.persistence import save_settings
+                        save_settings()
+                        log_msg = format_log_message('INFO', f"已添加成功验证的客户端API密钥到池中并持久化: {client_key[:8]}...")
+                        logger.info(log_msg)
+                    except Exception as e:
+                        log_msg = format_log_message('WARNING', f"客户端API密钥已添加到内存池，但持久化失败: {str(e)}")
+                        logger.warning(log_msg)
+                
                 return True
             return False
 
