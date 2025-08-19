@@ -917,3 +917,54 @@ async def update_logging_config(config_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新日志配置失败：{str(e)}")
+
+@dashboard_router.post("/test-logging")
+async def test_logging_function(password_data: dict):
+    """
+    测试日志记录功能
+    """
+    try:
+        if not isinstance(password_data, dict):
+            raise HTTPException(status_code=422, detail="请求体格式错误：应为JSON对象")
+            
+        password = password_data.get("password")
+        if not password:
+            raise HTTPException(status_code=400, detail="缺少密码参数")
+            
+        if not verify_web_password(password):
+            raise HTTPException(status_code=401, detail="密码错误")
+        
+        # 测试调用日志记录函数
+        from app.utils.logging import log_upstream_response
+        test_response_data = {
+            "test": "response",
+            "message": "This is a test response",
+            "timestamp": "2025-08-19T15:10:00Z"
+        }
+        
+        log_upstream_response(test_response_data, "test-api-key", "test-model", "test_request")
+        
+        return {
+            "status": "success", 
+            "message": "测试日志记录函数已调用"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试日志记录失败：{str(e)}")
+
+@dashboard_router.get("/debug-logging-state")
+async def debug_logging_state():
+    """
+    调试日志记录状态
+    """
+    import app.config.settings as settings
+    import os
+    
+    return {
+        "LOG_UPSTREAM_RESPONSES_ENABLED": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
+        "ENABLE_STORAGE": settings.ENABLE_STORAGE,
+        "STORAGE_DIR": settings.STORAGE_DIR,
+        "LOG_UPSTREAM_RESPONSES_ENV": os.environ.get("LOG_UPSTREAM_RESPONSES", "not_set"),
+        "ENABLE_STORAGE_ENV": os.environ.get("ENABLE_STORAGE", "not_set")
+    }

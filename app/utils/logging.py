@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 from collections import deque
 from threading import Lock
@@ -190,7 +191,8 @@ def log_upstream_response(response_data, api_key, model, request_type="gemini"):
                     json.dump(log_content, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 # 如果文件写入失败，降级到控制台输出
-                print(f"UPSTREAM_RESPONSE_FILE_ERROR: {e}")
+                print(f"UPSTREAM_RESPONSE_FILE_ERROR: {type(e).__name__}: {e}")
+                print(f"UPSTREAM_RESPONSE_FILE_PATH: {filepath}")
                 print(f"UPSTREAM_RESPONSE: {json.dumps(log_content, ensure_ascii=False)}")
         else:
             # 输出到控制台（docker日志）
