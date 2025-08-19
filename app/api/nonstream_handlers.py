@@ -10,6 +10,7 @@ import app.config.settings as settings
 from typing import Literal
 from app.utils.response import gemini_from_text, openAI_from_Gemini, openAI_from_text
 from app.utils.stats import get_api_key_usage
+from app.utils.content_validator import quick_unclosed_check
 
 
 # 非流式请求处理函数
@@ -228,8 +229,11 @@ async def process_request(
     # 空响应计数
     empty_response_count = 0
     
+    # 未闭合标签重试计数
+    unclosed_tag_retry_count = 0
+    
     # 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-    while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES):
+    while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES):
         # 获取当前批次的密钥数量
         batch_num = min(max_retry_num - current_try_num, current_concurrent)
         
@@ -337,6 +341,15 @@ async def process_request(
                         if priority_key and api_key == priority_key:
                             await key_manager.add_successful_client_key(api_key)
                         cached_response, cache_hit = await  response_cache_manager.get_and_remove(cache_key)
+                        
+                        # 检测未闭合标签
+                        if cached_response and cached_response.text and quick_unclosed_check(cached_response.text):
+                            unclosed_tag_retry_count += 1
+                            log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
+                                extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+                            success = False  # 重置成功标志，继续重试循环
+                            break  # 跳出内层for循环
+                        
                         if is_gemini :
                             return cached_response.data
                         else:
@@ -416,8 +429,11 @@ async def process_nonstream_with_keepalive_stream(
             # 空响应计数
             empty_response_count = 0
             
+            # 未闭合标签重试计数
+            unclosed_tag_retry_count = 0
+            
             # 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-            while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES):
+            while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES):
                 # 获取当前批次的密钥数量
                 batch_num = min(max_retry_num - current_try_num, current_concurrent)
                 
@@ -521,6 +537,14 @@ async def process_nonstream_with_keepalive_stream(
                                 if priority_key and api_key == priority_key:
                                     await key_manager.add_successful_client_key(api_key)
                                 cached_response, cache_hit = await response_cache_manager.get_and_remove(cache_key)
+                                
+                                # 检测未闭合标签
+                                if cached_response and cached_response.text and quick_unclosed_check(cached_response.text):
+                                    unclosed_tag_retry_count += 1
+                                    log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
+                                        extra={'key': api_key[:8], 'request_type': 'non-stream-keepalive', 'model': chat_request.model})
+                                    success = False  # 重置成功标志，继续重试循环
+                                    break  # 跳出内层for循环
                                 
                                 # 发送最终的非流式响应
                                 if is_gemini:
