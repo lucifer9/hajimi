@@ -331,7 +331,8 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
             chat_request,
             contents,
             safety_settings_g2 if 'gemini-2.5' in chat_request.model else safety_settings,
-            system_instruction
+            system_instruction,
+            log_response=False
         )
     )
     gemini_task = asyncio.shield(gemini_task)

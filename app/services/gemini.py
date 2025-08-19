@@ -391,7 +391,7 @@ class GeminiClient:
                     log_stream_request_end(stream_request_id)
 
     # 非流式处理
-    async def complete_chat(self, request, contents, safety_settings, system_instruction):
+    async def complete_chat(self, request, contents, safety_settings, system_instruction, log_response=True):
 
         api_version, model, data = self._convert_request_data(request, contents, safety_settings, system_instruction)
         
@@ -408,8 +408,9 @@ class GeminiClient:
             response_json = response.json()
             
             # 记录完整的上游响应（动态检查环境变量）
-            from app.utils.logging import log_upstream_response
-            log_upstream_response(response_json, self.api_key, request.model, "complete_chat")
+            if log_response:
+                from app.utils.logging import log_upstream_response
+                log_upstream_response(response_json, self.api_key, request.model, "complete_chat")
             
             return GeminiResponseWrapper(response_json, request.model)
         except Exception as e:
