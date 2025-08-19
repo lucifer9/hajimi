@@ -6,6 +6,7 @@ from app.services import GeminiClient
 from app.utils import handle_gemini_error, update_api_call_stats,log,openAI_from_text
 from app.utils.response import openAI_from_Gemini,gemini_from_text
 from app.utils.stats import get_api_key_usage
+from app.utils.content_validator import quick_unclosed_check
 import app.config.settings as settings
 
 async def stream_response_generator(
@@ -35,8 +36,11 @@ async def stream_response_generator(
     # 空响应计数
     empty_response_count = 0
     
+    # 未闭合标签重试计数
+    unclosed_tag_retry_count = 0
+    
     # (假流式) 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-    while (settings.FAKE_STREAMING and (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES)):
+    while (settings.FAKE_STREAMING and (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES)):
         # 获取当前批次的密钥数量
         batch_num = min(max_retry_num - current_try_num, current_concurrent)
         
@@ -159,6 +163,11 @@ async def stream_response_generator(
                             empty_response_count += 1
                             log('warning', f"空响应计数: {empty_response_count}/{settings.MAX_EMPTY_RESPONSES}",
                                 extra={'key': api_key[:8], 'request_type': 'stream', 'model': chat_request.model})
+                        elif status == "unclosed_tags":
+                            # 增加未闭合标签重试计数
+                            unclosed_tag_retry_count += 1
+                            log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
+                                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
                         
                     except Exception as e:
                         error_detail = handle_gemini_error(e, api_key)
@@ -357,6 +366,12 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
             log('warning', f"请求返回空响应",
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})        
             return "empty"
+
+        # 检测未闭合标签
+        if response_content and response_content.text and quick_unclosed_check(response_content.text):
+            log('warning', f"检测到未闭合标签，需要重试",
+                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
+            return "unclosed_tags"
 
         # 缓存
         await response_cache_manager.store(cache_key, response_content)
