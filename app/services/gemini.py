@@ -331,6 +331,10 @@ class GeminiClient:
         extra_log = {'key': self.api_key[:8], 'request_type': 'stream', 'model': request.model}
         log('INFO', "流式请求开始", extra=extra_log)
         
+        # 初始化流式响应的累积日志
+        from app.utils.logging import log_stream_request_start, log_stream_chunk, log_stream_request_end
+        stream_request_id = log_stream_request_start(self.api_key, request.model)
+        
         api_version, model, data = self._convert_request_data(request, contents, safety_settings, system_instruction)
         
         
@@ -364,6 +368,10 @@ class GeminiClient:
                             data = json.loads(buffer.decode('utf-8'))
                             # 解析成功，清空缓冲区
                             buffer = b""
+                            
+                            # 记录到累积日志系统
+                            log_stream_chunk(stream_request_id, data)
+                            
                             yield GeminiResponseWrapper(data)
 
                         except json.JSONDecodeError:
@@ -374,9 +382,13 @@ class GeminiClient:
                     # 在重新抛出异常之前，确保响应体被完全读取
                     if not response.is_closed:
                         await response.aread()
+                    # 异常情况下也要结束日志记录
+                    log_stream_request_end(stream_request_id)
                     raise e
                 finally:
                     log('info', "流式请求结束")
+                    # 正常结束时完成日志记录
+                    log_stream_request_end(stream_request_id)
 
     # 非流式处理
     async def complete_chat(self, request, contents, safety_settings, system_instruction):
@@ -393,7 +405,13 @@ class GeminiClient:
                 response = await client.post(url, headers=headers, json=data, timeout=600) 
                 response.raise_for_status() # 检查 HTTP 错误状态
             
-            return GeminiResponseWrapper(response.json(), request.model)
+            response_json = response.json()
+            
+            # 记录完整的上游响应（动态检查环境变量）
+            from app.utils.logging import log_upstream_response
+            log_upstream_response(response_json, self.api_key, request.model, "complete_chat")
+            
+            return GeminiResponseWrapper(response_json, request.model)
         except Exception as e:
             raise
 

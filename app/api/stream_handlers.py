@@ -342,6 +342,11 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
         response_content.set_model(chat_request.model)
         log('info', f"假流式成功获取响应，进行缓存",
             extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
+        
+        # 专门为fake streaming模式添加日志标记（区别于普通的complete_chat）
+        from app.utils.logging import log_upstream_response
+        if hasattr(response_content, '_data'):  # GeminiResponseWrapper有_data属性
+            log_upstream_response(response_content._data, api_key, chat_request.model, "fake_streaming")
 
         # 更新API调用统计
         await update_api_call_stats(settings.api_call_stats, endpoint=api_key, model=chat_request.model,token=response_content.total_token_count)
