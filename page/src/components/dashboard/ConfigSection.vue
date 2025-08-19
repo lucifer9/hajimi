@@ -38,7 +38,8 @@ const configExplanations = {
   searchPrompt: '联网搜索提示',
   enableVertexExpress: '是否启用Vertex Express模式',
   vertexExpressApiKey: 'Vertex Express API密钥',
-  googleCredentialsJson: 'Google Credentials JSON'
+  googleCredentialsJson: 'Google Credentials JSON',
+  ignorableTags: '未闭合标签检测时可忽略的标签，这些标签内的未闭合标签不会触发重试'
 }
 
 // 显示解释的工具提示

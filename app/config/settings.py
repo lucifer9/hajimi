@@ -83,6 +83,10 @@ MIN_RESPONSE_LENGTH = int(os.environ.get("MIN_RESPONSE_LENGTH", "10"))  # 默认
 # 上游响应日志记录配置（内存缓存，避免每次都读取环境变量）
 LOG_UPSTREAM_RESPONSES_ENABLED = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
 
+# 未闭合标签检测中可忽略的标签配置
+IGNORABLE_TAGS_STR = os.environ.get("IGNORABLE_TAGS", "assess,your_choice,Status_block,tableThink,tableEdit,abstract,UpdateVariable,INDRS,details,think,thinking")
+IGNORABLE_TAGS = [tag.strip() for tag in IGNORABLE_TAGS_STR.split(',') if tag.strip()]
+
 # ---------- 以下是其他配置信息 ----------
 
 # 访问限制

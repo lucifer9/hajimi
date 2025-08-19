@@ -181,6 +181,8 @@ async def get_dashboard_data():
         "max_retry_num": settings.MAX_RETRY_NUM,
         # 添加空响应重试次数限制
         "max_empty_responses": settings.MAX_EMPTY_RESPONSES,
+        # 添加可忽略标签配置
+        "ignorable_tags": settings.IGNORABLE_TAGS_STR,
     }
 
 @dashboard_router.post("/reset-stats")
@@ -594,6 +596,23 @@ async def update_config(config_data: dict):
                 log('info', f"空响应重试次数已更新为：{value}")
             except ValueError as e:
                 raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+                
+        elif config_key == "ignorable_tags":
+            if not isinstance(config_value, str):
+                raise HTTPException(status_code=422, detail="参数类型错误：可忽略标签应为字符串")
+                
+            # 解析标签字符串，支持逗号分隔
+            new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()]
+            
+            if not new_tags:
+                raise HTTPException(status_code=400, detail="至少需要提供一个有效的标签")
+            
+            # 更新配置
+            settings.IGNORABLE_TAGS_STR = config_value
+            settings.IGNORABLE_TAGS = new_tags
+            
+            log('info', f"可忽略标签已更新为：{config_value}")
+            log('info', f"解析后的标签列表：{new_tags}")
         
         else:
             raise HTTPException(status_code=400, detail=f"不支持的配置项：{config_key}")

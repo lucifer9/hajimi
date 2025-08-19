@@ -17,7 +17,8 @@ const localConfig = reactive({
   increaseConcurrentOnFailure: 0,
   maxConcurrentRequests: 1, // Default to 1 or a sensible minimum
   maxEmptyResponses: 0,
-  logUpstreamResponses: false // 新增日志配置
+  logUpstreamResponses: false, // 新增日志配置
+  ignorableTags: '' // 可忽略标签配置
 })
 
 const populatedFromStore = ref(false);
@@ -44,6 +45,7 @@ watch(
     storeIncreaseConcurrentOnFailure: dashboardStore.config.increaseConcurrentOnFailure,
     storeMaxConcurrentRequests: dashboardStore.config.maxConcurrentRequests,
     storeMaxEmptyResponses: dashboardStore.config.maxEmptyResponses,
+    storeIgnorableTags: dashboardStore.config.ignorableTags,
     configIsActuallyLoaded: dashboardStore.isConfigLoaded, // 观察加载状态
   }),
   (newValues) => {
@@ -59,6 +61,7 @@ watch(
       localConfig.increaseConcurrentOnFailure = newValues.storeIncreaseConcurrentOnFailure;
       localConfig.maxConcurrentRequests = newValues.storeMaxConcurrentRequests;
       localConfig.maxEmptyResponses = newValues.storeMaxEmptyResponses;
+      localConfig.ignorableTags = newValues.storeIgnorableTags || '';
       populatedFromStore.value = true;
     }
   },
@@ -271,6 +274,20 @@ defineExpose({
             v-model="localConfig.searchPrompt" 
             placeholder="请输入联网搜索提示"
           >
+        </div>
+      </div>
+      
+      <!-- 可忽略标签配置 -->
+      <div class="config-row">
+        <div class="config-group full-width">
+          <label class="config-label">未闭合标签检测可忽略标签</label>
+          <input 
+            type="text" 
+            class="config-input" 
+            v-model="localConfig.ignorableTags" 
+            placeholder="请输入逗号分隔的标签名，如：think,thinking,assess,details"
+          >
+          <small class="config-help">这些标签内的未闭合标签将被忽略，不会触发重试</small>
         </div>
       </div>
       
