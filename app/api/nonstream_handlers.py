@@ -49,6 +49,18 @@ async def process_nonstream_request(
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
         
+        # 检测未闭合标签
+        if response_content and response_content.text and quick_unclosed_check(response_content.text):
+            log('warning', f"检测到未闭合标签，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测响应长度
+        if response_content and response_content.text and len(response_content.text) < settings.MIN_RESPONSE_LENGTH:
+            log('warning', f"响应长度过短({len(response_content.text)}字符)，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "too_short"
+        
         # 缓存响应结果
         await response_cache_manager.store(cache_key, response_content)
         # 更新 API 调用统计
@@ -106,6 +118,18 @@ async def process_nonstream_request_with_keepalive(
             log('warning', f"API密钥 {current_api_key[:8]}... 返回空响应",
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
+        
+        # 检测未闭合标签
+        if response_content and response_content.text and quick_unclosed_check(response_content.text):
+            log('warning', f"检测到未闭合标签，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测响应长度
+        if response_content and response_content.text and len(response_content.text) < settings.MIN_RESPONSE_LENGTH:
+            log('warning', f"响应长度过短({len(response_content.text)}字符)，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "too_short"
         
         # 缓存响应结果
         await response_cache_manager.store(cache_key, response_content)
@@ -167,6 +191,18 @@ async def process_nonstream_request_with_simple_keepalive(
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
         
+        # 检测未闭合标签
+        if response_content and response_content.text and quick_unclosed_check(response_content.text):
+            log('warning', f"检测到未闭合标签，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测响应长度
+        if response_content and response_content.text and len(response_content.text) < settings.MIN_RESPONSE_LENGTH:
+            log('warning', f"响应长度过短({len(response_content.text)}字符)，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "too_short"
+        
         # 缓存响应结果
         await response_cache_manager.store(cache_key, response_content)
         # 更新 API 调用统计
@@ -226,14 +262,11 @@ async def process_request(
     # 当前请求次数
     current_try_num = 0
     
-    # 空响应计数
-    empty_response_count = 0
+    # 重试原因跟踪
+    retry_reason = None
     
-    # 未闭合标签重试计数
-    unclosed_tag_retry_count = 0
-    
-    # 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-    while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES):
+    # 尝试使用不同API密钥，直到达到最大重试次数
+    while current_try_num < max_retry_num:
         # 获取当前批次的密钥数量
         batch_num = min(max_retry_num - current_try_num, current_concurrent)
         
@@ -342,22 +375,21 @@ async def process_request(
                             await key_manager.add_successful_client_key(api_key)
                         cached_response, cache_hit = await  response_cache_manager.get_and_remove(cache_key)
                         
-                        # 检测未闭合标签
-                        if cached_response and cached_response.text and quick_unclosed_check(cached_response.text):
-                            unclosed_tag_retry_count += 1
-                            log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
-                                extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
-                            success = False  # 重置成功标志，继续重试循环
-                            break  # 跳出内层for循环
-                        
                         if is_gemini :
                             return cached_response.data
                         else:
                             return openAI_from_Gemini(cached_response,stream=False)
                     elif status == "empty":
-                        # 增加空响应计数
-                        empty_response_count += 1
-                        log('warning', f"空响应计数: {empty_response_count}/{settings.MAX_EMPTY_RESPONSES}",
+                        retry_reason = "空响应"
+                        log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                            extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+                    elif status == "unclosed_tags":
+                        retry_reason = "未闭合标签"
+                        log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                            extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+                    elif status == "too_short":
+                        retry_reason = "响应过短"
+                        log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
                             extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
                 
                 except Exception as e:
@@ -373,15 +405,6 @@ async def process_request(
             log('info', f"所有并发请求失败或返回空响应，增加并发数至: {current_concurrent}", 
                 extra={'request_type': 'non-stream', 'model': chat_request.model})
         
-        # 如果空响应次数达到限制，跳出循环，并返回酒馆正常响应(包含错误信息)
-        if empty_response_count >= settings.MAX_EMPTY_RESPONSES:
-            log('warning', f"空响应次数达到限制 ({empty_response_count}/{settings.MAX_EMPTY_RESPONSES})，停止轮询",
-                extra={'request_type': 'non-stream', 'model': chat_request.model})
-            
-            if is_gemini :
-                return gemini_from_text(content="空响应次数达到上限\n请修改输入提示词",finish_reason="STOP",stream=False)
-            else:
-                return openAI_from_text(model=chat_request.model,content="空响应次数达到上限\n请修改输入提示词",finish_reason="stop",stream=False)
     
     # 如果所有尝试都失败
     log('error', "API key 替换失败，所有API key都已尝试，请重新配置或稍后重试", extra={'request_type': 'switch_key'})
@@ -426,14 +449,11 @@ async def process_nonstream_with_keepalive_stream(
             # 当前请求次数
             current_try_num = 0
             
-            # 空响应计数
-            empty_response_count = 0
+            # 重试原因跟踪
+            retry_reason = None
             
-            # 未闭合标签重试计数
-            unclosed_tag_retry_count = 0
-            
-            # 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-            while (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES):
+            # 尝试使用不同API密钥，直到达到最大重试次数
+            while current_try_num < max_retry_num:
                 # 获取当前批次的密钥数量
                 batch_num = min(max_retry_num - current_try_num, current_concurrent)
                 
@@ -538,14 +558,6 @@ async def process_nonstream_with_keepalive_stream(
                                     await key_manager.add_successful_client_key(api_key)
                                 cached_response, cache_hit = await response_cache_manager.get_and_remove(cache_key)
                                 
-                                # 检测未闭合标签
-                                if cached_response and cached_response.text and quick_unclosed_check(cached_response.text):
-                                    unclosed_tag_retry_count += 1
-                                    log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
-                                        extra={'key': api_key[:8], 'request_type': 'non-stream-keepalive', 'model': chat_request.model})
-                                    success = False  # 重置成功标志，继续重试循环
-                                    break  # 跳出内层for循环
-                                
                                 # 发送最终的非流式响应
                                 if is_gemini:
                                     final_response = cached_response.data
@@ -556,10 +568,17 @@ async def process_nonstream_with_keepalive_stream(
                                 yield json.dumps(final_response, ensure_ascii=False)
                                 return
                             elif status == "empty":
-                                # 增加空响应计数
-                                empty_response_count += 1
-                                log('warning', f"空响应计数: {empty_response_count}/{settings.MAX_EMPTY_RESPONSES}",
-                                    extra={'key': api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+                                retry_reason = "空响应"
+                                log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                                    extra={'key': api_key[:8], 'request_type': 'non-stream-keepalive', 'model': chat_request.model})
+                            elif status == "unclosed_tags":
+                                retry_reason = "未闭合标签"
+                                log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                                    extra={'key': api_key[:8], 'request_type': 'non-stream-keepalive', 'model': chat_request.model})
+                            elif status == "too_short":
+                                retry_reason = "响应过短"
+                                log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                                    extra={'key': api_key[:8], 'request_type': 'non-stream-keepalive', 'model': chat_request.model})
                         
                         except Exception as e:
                             handle_gemini_error(e, api_key)
@@ -574,18 +593,6 @@ async def process_nonstream_with_keepalive_stream(
                     log('info', f"所有并发请求失败或返回空响应，增加并发数至: {current_concurrent}", 
                         extra={'request_type': 'non-stream', 'model': chat_request.model})
                 
-                # 如果空响应次数达到限制，跳出循环，并返回酒馆正常响应(包含错误信息)
-                if empty_response_count >= settings.MAX_EMPTY_RESPONSES:
-                    log('warning', f"空响应次数达到限制 ({empty_response_count}/{settings.MAX_EMPTY_RESPONSES})，停止轮询",
-                        extra={'request_type': 'non-stream', 'model': chat_request.model})
-                    
-                    if is_gemini :
-                        error_response = gemini_from_text(content="空响应次数达到上限\n请修改输入提示词", finish_reason="STOP", stream=False)
-                    else:
-                        error_response = openAI_from_text(model=chat_request.model, content="空响应次数达到上限\n请修改输入提示词", finish_reason="stop", stream=False)
-                    
-                    yield json.dumps(error_response, ensure_ascii=False)
-                    return
             
             # 如果所有尝试都失败
             log('error', "API key 替换失败，所有API key都已尝试，请重新配置或稍后重试", extra={'request_type': 'switch_key'})

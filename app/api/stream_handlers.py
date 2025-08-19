@@ -33,14 +33,11 @@ async def stream_response_generator(
     # 当前请求次数
     current_try_num = 0
     
-    # 空响应计数
-    empty_response_count = 0
+    # 重试原因跟踪
+    retry_reason = None
     
-    # 未闭合标签重试计数
-    unclosed_tag_retry_count = 0
-    
-    # (假流式) 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-    while (settings.FAKE_STREAMING and (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES) and (unclosed_tag_retry_count < settings.MAX_UNCLOSED_TAG_RETRIES)):
+    # (假流式) 尝试使用不同API密钥，直到达到最大重试次数
+    while settings.FAKE_STREAMING and current_try_num < max_retry_num:
         # 获取当前批次的密钥数量
         batch_num = min(max_retry_num - current_try_num, current_concurrent)
         
@@ -159,14 +156,16 @@ async def stream_response_generator(
                                 success = False
                             break
                         elif status == "empty":
-                            # 增加空响应计数
-                            empty_response_count += 1
-                            log('warning', f"空响应计数: {empty_response_count}/{settings.MAX_EMPTY_RESPONSES}",
-                                extra={'key': api_key[:8], 'request_type': 'stream', 'model': chat_request.model})
+                            retry_reason = "空响应"
+                            log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
                         elif status == "unclosed_tags":
-                            # 增加未闭合标签重试计数
-                            unclosed_tag_retry_count += 1
-                            log('warning', f"检测到未闭合标签，重试 ({unclosed_tag_retry_count}/{settings.MAX_UNCLOSED_TAG_RETRIES})",
+                            retry_reason = "未闭合标签"
+                            log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
+                                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
+                        elif status == "too_short":
+                            retry_reason = "响应过短"
+                            log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
                                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
                         
                     except Exception as e:
@@ -176,17 +175,6 @@ async def stream_response_generator(
 
             # 如果找到成功的响应，跳出循环
             if success:
-                return
-            
-            # 如果空响应次数达到限制，跳出循环
-            if empty_response_count >= settings.MAX_EMPTY_RESPONSES:
-                log('warning', f"空响应次数达到限制 ({empty_response_count}/{settings.MAX_EMPTY_RESPONSES})，停止轮询",
-                    extra={'request_type': 'fake-stream', 'model': chat_request.model})
-                if is_gemini :
-                    yield gemini_from_text(content="空响应次数达到上限\n请修改输入提示词",finish_reason="STOP",stream=True)
-                else:
-                    yield openAI_from_text(model=chat_request.model,content="空响应次数达到上限\n请修改输入提示词",finish_reason="stop",stream=True)
-                
                 return
             
             # 更新任务列表，移除已完成的任务
@@ -199,8 +187,8 @@ async def stream_response_generator(
             log('info', f"所有假流式请求失败，增加并发数至: {current_concurrent}", 
                 extra={'request_type': 'stream', 'model': chat_request.model})
 
-    # (真流式) 尝试使用不同API密钥，直到达到最大重试次数或空响应限制
-    while (not settings.FAKE_STREAMING and (current_try_num < max_retry_num) and (empty_response_count < settings.MAX_EMPTY_RESPONSES)):
+    # (真流式) 尝试使用不同API密钥，直到达到最大重试次数
+    while not settings.FAKE_STREAMING and current_try_num < max_retry_num:
         # 获取当前批次的密钥
         valid_keys = []
         checked_keys = set()  # 用于记录已检查过的密钥
@@ -277,10 +265,9 @@ async def stream_response_generator(
                     yield data
                     
                 else:
-                    log('warning', f"流式请求返回空响应，空响应计数: {empty_response_count}/{settings.MAX_EMPTY_RESPONSES}",
+                    retry_reason = "空响应"
+                    log('warning', f"重试 ({current_try_num+1}/{max_retry_num}) - 原因: {retry_reason}",
                         extra={'key': api_key[:8], 'request_type': 'stream', 'model': chat_request.model})
-                    # 增加空响应计数
-                    empty_response_count += 1
                     await update_api_call_stats(
                         settings.api_call_stats, 
                         endpoint=api_key, 
@@ -307,18 +294,6 @@ async def stream_response_generator(
                     await key_manager.add_successful_client_key(api_key)
                 return
             
-            # 如果空响应次数达到限制，跳出循环
-            if empty_response_count >= settings.MAX_EMPTY_RESPONSES:
-                
-                log('warning', f"空响应次数达到限制 ({empty_response_count}/{settings.MAX_EMPTY_RESPONSES})，停止轮询",
-                    extra={'request_type': 'stream', 'model': chat_request.model})
-                
-                if is_gemini:
-                    yield gemini_from_text(content="空响应次数达到上限\n请修改输入提示词",finish_reason="STOP",stream=True)
-                else:
-                    yield openAI_from_text(model=chat_request.model,content="空响应次数达到上限\n请修改输入提示词",finish_reason="stop",stream=True)
-                
-                return
     
     # 所有API密钥都尝试失败的处理
     log('error', "所有 API 密钥均请求失败，请稍后重试",
@@ -372,6 +347,12 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
             log('warning', f"检测到未闭合标签，需要重试",
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
             return "unclosed_tags"
+
+        # 检测响应长度
+        if response_content and response_content.text and len(response_content.text) < settings.MIN_RESPONSE_LENGTH:
+            log('warning', f"响应长度过短({len(response_content.text)}字符)，需要重试",
+                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
+            return "too_short"
 
         # 缓存
         await response_cache_manager.store(cache_key, response_content)

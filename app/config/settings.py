@@ -74,8 +74,11 @@ RANDOM_STRING_LENGTH = int(os.environ.get("RANDOM_STRING_LENGTH", "5"))
 # 空响应重试次数限制
 MAX_EMPTY_RESPONSES = int(os.environ.get("MAX_EMPTY_RESPONSES", "5"))  # 默认最多允许5次空响应
 
-# 未闭合标签重试次数限制
+# 未闭合标签重试次数限制（向后兼容，内部统一使用MAX_RETRY_NUM）
 MAX_UNCLOSED_TAG_RETRIES = int(os.environ.get("MAX_UNCLOSED_TAG_RETRIES", "5"))  # 默认最多允许5次未闭合标签重试
+
+# 响应长度检测配置
+MIN_RESPONSE_LENGTH = int(os.environ.get("MIN_RESPONSE_LENGTH", "10"))  # 默认最短响应长度
 
 # 上游响应日志记录配置（内存缓存，避免每次都读取环境变量）
 LOG_UPSTREAM_RESPONSES_ENABLED = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
