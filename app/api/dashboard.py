@@ -4,6 +4,7 @@ import time
 import asyncio
 import random
 import threading
+import os
 from app.utils import (
     log_manager,
     ResponseCacheManager,
@@ -844,3 +845,75 @@ async def export_valid_api_keys(password_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取有效API密钥失败：{str(e)}")
+
+@dashboard_router.get("/logging-config")
+async def get_logging_config():
+    """
+    获取当前日志配置状态
+    
+    Returns:
+        dict: 当前日志配置信息
+    """
+    try:
+        return {
+            "status": "success",
+            "config": {
+                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
+                "enable_storage": settings.ENABLE_STORAGE
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取日志配置失败：{str(e)}")
+
+@dashboard_router.post("/logging-config")
+async def update_logging_config(config_data: dict):
+    """
+    动态更新LOG_UPSTREAM_RESPONSES设置
+    
+    Args:
+        config_data (dict): 包含密码和日志配置的字典
+        
+    Returns:
+        dict: 操作结果
+    """
+    try:
+        if not isinstance(config_data, dict):
+            raise HTTPException(status_code=422, detail="请求体格式错误：应为JSON对象")
+            
+        password = config_data.get("password")
+        if not password:
+            raise HTTPException(status_code=400, detail="缺少密码参数")
+            
+        if not isinstance(password, str):
+            raise HTTPException(status_code=422, detail="密码参数类型错误：应为字符串")
+            
+        if not verify_web_password(password):
+            raise HTTPException(status_code=401, detail="密码错误")
+        
+        # 获取要更新的日志配置
+        log_upstream_responses = config_data.get("log_upstream_responses")
+        
+        if log_upstream_responses is None:
+            raise HTTPException(status_code=400, detail="缺少log_upstream_responses参数")
+            
+        if not isinstance(log_upstream_responses, bool):
+            raise HTTPException(status_code=422, detail="log_upstream_responses参数类型错误：应为布尔值")
+        
+        # 同时更新内存变量和环境变量
+        settings.LOG_UPSTREAM_RESPONSES_ENABLED = log_upstream_responses
+        os.environ["LOG_UPSTREAM_RESPONSES"] = "true" if log_upstream_responses else "false"
+        
+        log('info', f"上游响应日志记录已更新为：{log_upstream_responses}")
+        
+        return {
+            "status": "success", 
+            "message": f"日志配置已更新：LOG_UPSTREAM_RESPONSES = {log_upstream_responses}",
+            "config": {
+                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
+                "enable_storage": settings.ENABLE_STORAGE
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新日志配置失败：{str(e)}")

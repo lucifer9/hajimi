@@ -77,6 +77,9 @@ MAX_EMPTY_RESPONSES = int(os.environ.get("MAX_EMPTY_RESPONSES", "5"))  # 默认�
 # 未闭合标签重试次数限制
 MAX_UNCLOSED_TAG_RETRIES = int(os.environ.get("MAX_UNCLOSED_TAG_RETRIES", "5"))  # 默认最多允许5次未闭合标签重试
 
+# 上游响应日志记录配置（内存缓存，避免每次都读取环境变量）
+LOG_UPSTREAM_RESPONSES_ENABLED = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
+
 # ---------- 以下是其他配置信息 ----------
 
 # 访问限制

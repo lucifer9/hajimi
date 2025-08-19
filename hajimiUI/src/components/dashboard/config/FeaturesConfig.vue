@@ -1,6 +1,6 @@
 <script setup>
 import { useDashboardStore } from '../../../stores/dashboard'
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 
 const dashboardStore = useDashboardStore()
 
@@ -16,10 +16,19 @@ const localConfig = reactive({
   concurrentRequests: 1, // Default to 1 or a sensible minimum
   increaseConcurrentOnFailure: 0,
   maxConcurrentRequests: 1, // Default to 1 or a sensible minimum
-  maxEmptyResponses: 0
+  maxEmptyResponses: 0,
+  logUpstreamResponses: false // 新增日志配置
 })
 
 const populatedFromStore = ref(false);
+
+// 日志配置状态
+const loggingConfig = reactive({
+  logUpstreamResponses: false,
+  enableStorage: false
+})
+
+const isRefreshingLogging = ref(false)
 
 // Watch for store changes to populate localConfig ONCE when config is loaded
 watch(
@@ -68,7 +77,23 @@ async function saveComponentConfigs(passwordFromParent) {
   // 逐个保存配置项
   const configKeys = Object.keys(localConfig);
   for (const key of configKeys) {
-    if (localConfig[key] !== dashboardStore.config[key]) {
+    if (key === 'logUpstreamResponses') {
+      // 日志配置使用专门的API
+      if (localConfig[key] !== loggingConfig.logUpstreamResponses) {
+        try {
+          const result = await updateLoggingConfig(localConfig[key], passwordFromParent);
+          if (result.success) {
+            individualMessages.push(`日志配置保存成功`);
+          } else {
+            allSucceeded = false;
+            individualMessages.push(`日志配置保存失败: ${result.message}`);
+          }
+        } catch (error) {
+          allSucceeded = false;
+          individualMessages.push(`日志配置保存失败: ${error.message || '未知错误'}`);
+        }
+      }
+    } else if (localConfig[key] !== dashboardStore.config[key]) {
       try {
         await dashboardStore.updateConfig(key, localConfig[key], passwordFromParent);
         // 更新store中的值 - 仅在API调用成功后
@@ -96,6 +121,71 @@ async function saveComponentConfigs(passwordFromParent) {
 function getBooleanText(value) {
   return value ? '启用' : '禁用'
 }
+
+// 获取日志配置
+async function refreshLoggingConfig() {
+  isRefreshingLogging.value = true
+  try {
+    const response = await fetch('/api/logging-config', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    if (data.status === 'success' && data.config) {
+      loggingConfig.logUpstreamResponses = data.config.log_upstream_responses
+      loggingConfig.enableStorage = data.config.enable_storage
+      localConfig.logUpstreamResponses = data.config.log_upstream_responses
+    }
+  } catch (error) {
+    console.error('获取日志配置失败:', error)
+  } finally {
+    isRefreshingLogging.value = false
+  }
+}
+
+// 更新日志配置
+async function updateLoggingConfig(logUpstreamResponses, password) {
+  try {
+    const response = await fetch('/api/logging-config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        password: password,
+        log_upstream_responses: logUpstreamResponses
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    if (data.status === 'success' && data.config) {
+      loggingConfig.logUpstreamResponses = data.config.log_upstream_responses
+      loggingConfig.enableStorage = data.config.enable_storage
+      return { success: true, message: data.message }
+    }
+    
+    return { success: false, message: '更新失败' }
+  } catch (error) {
+    return { success: false, message: error.message }
+  }
+}
+
+// 组件挂载时获取日志配置
+onMounted(() => {
+  refreshLoggingConfig()
+})
 
 defineExpose({
   saveComponentConfigs,
@@ -138,6 +228,36 @@ defineExpose({
               <span class="toggle-text">{{ getBooleanText(localConfig.randomString) }}</span>
             </label>
           </div>
+        </div>
+      </div>
+      
+      <!-- 日志配置行 -->
+      <div class="config-row">
+        <div class="config-group">
+          <label class="config-label">上游响应日志</label>
+          <div class="toggle-wrapper">
+            <input type="checkbox" class="toggle" id="logUpstreamResponses" v-model="localConfig.logUpstreamResponses">
+            <label for="logUpstreamResponses" class="toggle-label">
+              <span class="toggle-text">{{ getBooleanText(localConfig.logUpstreamResponses) }}</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="config-group">
+          <div class="log-status">
+            <span class="status-label">存储状态:</span>
+            <span class="status-value">{{ loggingConfig.enableStorage ? '文件存储' : '控制台输出' }}</span>
+          </div>
+        </div>
+        
+        <div class="config-group">
+          <button 
+            class="refresh-logging-btn" 
+            @click="refreshLoggingConfig"
+            :disabled="isRefreshingLogging"
+          >
+            {{ isRefreshingLogging ? '刷新中...' : '刷新状态' }}
+          </button>
         </div>
       </div>
       
@@ -370,6 +490,56 @@ defineExpose({
 .toggle-text {
   font-size: 14px;
   color: var(--color-text);
+}
+
+/* 日志配置样式 */
+.log-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 42px;
+  justify-content: center;
+}
+
+.status-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.status-value {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.refresh-logging-btn {
+  padding: 8px 12px;
+  background-color: var(--button-secondary);
+  color: var(--button-secondary-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  min-height: 42px;
+}
+
+.refresh-logging-btn:hover {
+  background-color: var(--button-secondary-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.refresh-logging-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* 移动端优化 */

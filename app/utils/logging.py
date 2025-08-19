@@ -158,13 +158,11 @@ def log_upstream_response(response_data, api_key, model, request_type="gemini"):
         model: 使用的模型名称
         request_type: 请求类型（如complete_chat、stream_chat等）
     """
-    import os
     import json
     import app.config.settings as settings
     
-    # 动态读取LOG_UPSTREAM_RESPONSES环境变量
-    log_enabled = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
-    if not log_enabled:
+    # 使用内存缓存的变量，避免每次都读取环境变量
+    if not settings.LOG_UPSTREAM_RESPONSES_ENABLED:
         return
     
     try:
@@ -218,11 +216,10 @@ def log_stream_request_start(api_key, model):
         str: 唯一的请求ID
     """
     import uuid
-    import os
+    import app.config.settings as settings
     
-    # 动态检查环境变量，如果未启用则直接返回None
-    log_enabled = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
-    if not log_enabled:
+    # 使用内存缓存的变量，避免每次都读取环境变量
+    if not settings.LOG_UPSTREAM_RESPONSES_ENABLED:
         return None
     
     try:
@@ -299,16 +296,14 @@ def log_stream_request_end(request_id):
         # 移除临时字段
         del log_data["start_time"]
         
-        # 再次动态检查环境变量（防止运行期间被改变）
-        import os
-        log_enabled = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
-        if not log_enabled:
+        # 再次检查内存缓存变量（如果运行期间被通过API改变）
+        import app.config.settings as settings
+        import json
+        
+        if not settings.LOG_UPSTREAM_RESPONSES_ENABLED:
             # 清理内存
             del _active_stream_logs[request_id]
             return
-        
-        import app.config.settings as settings
-        import json
         
         if settings.ENABLE_STORAGE:
             # 输出到文件
