@@ -8,7 +8,16 @@ from app.utils.response import openAI_from_Gemini
 from app.utils.auth import custom_verify_password, verify_gemini_auth
 from .stream_handlers import process_stream_request
 from .nonstream_handlers import process_request, process_nonstream_with_keepalive_stream
-from app.models.schemas import ChatCompletionRequest, ChatCompletionResponse, ModelList, AIRequest, ChatRequestGemini
+from app.models.schemas import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ModelList,
+    AIRequest,
+    ChatRequestGemini,
+    EmbeddingRequest,
+    EmbeddingResponse,
+)
+from app.services.embedding import EmbeddingClient
 import app.config.settings as settings
 import asyncio
 from app.vertex.routes import chat_api, models_api
@@ -386,7 +395,109 @@ async def gemini_chat_completions(
     # 如果启用原生API加密，自动添加encrypt-full后缀
     if settings.NATIVE_API_ENCRYPT_FULL:
         model_name = f"{model_name}-encrypt-full"
-    
-    geminiRequest = AIRequest(payload=payload,model=model_name,stream=is_stream,format_type='gemini')
+
+    geminiRequest = AIRequest(
+        payload=payload, model=model_name, stream=is_stream, format_type="gemini"
+    )
     return await aistudio_chat_completions(geminiRequest, request, auth_result, _du)
-        
+
+
+@router.post("/v1/embeddings", response_model=EmbeddingResponse)
+async def create_embedding(
+    request: EmbeddingRequest,
+    http_request: Request,
+    _du=Depends(verify_user_agent),
+):
+    await protect_from_abuse(
+        http_request,
+        settings.MAX_REQUESTS_PER_MINUTE,
+        settings.MAX_REQUESTS_PER_DAY_PER_IP,
+    )
+
+    api_key = http_request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not api_key:
+        assert key_manager is not None
+        api_key = await key_manager.get_available_key()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid token",
+        )
+
+    client = EmbeddingClient(api_key)
+    try:
+        return await client.create_embeddings(request)
+    except Exception as e:
+        log("ERROR", f"An unexpected error occurred: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+
+@router.post("/api/vector/query")
+async def vector_query(
+    request: Request,
+    _du=Depends(verify_user_agent),
+):
+    log("INFO", f"Received vector query request with headers: {request.headers}")
+    body = await request.json()
+    search_text = body.get("searchText")
+    model = body.get("model")
+    api_key = body.get("apiKey") or request.headers.get("Authorization", "").replace("Bearer ", "")
+
+    if not api_key:
+        assert key_manager is not None
+        api_key = await key_manager.get_available_key()
+
+    if not all([search_text, model, api_key]):
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid token")
+
+    client = EmbeddingClient(api_key)
+    embedding_request = EmbeddingRequest(input=search_text, model=model)
+    
+    try:
+        embedding_response = await client.create_embeddings(embedding_request)
+        # Adapt the response to the format expected by the plugin
+        adapted_response = {
+            "hashes": [],
+            "metadata": [],
+            "items": [
+                {"text": "", "score": 0, "metadata": {"embedding": data.embedding}}
+                for data in embedding_response.data
+            ],
+            "similarities": [0] * len(embedding_response.data),
+        }
+        return adapted_response
+    except Exception as e:
+        log("ERROR", f"An unexpected error occurred during vector query: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+
+@router.post("/api/vector/insert")
+async def vector_insert(
+    request: Request,
+    _du=Depends(verify_user_agent),
+):
+    log("INFO", f"Received vector insert request with headers: {request.headers}")
+    body = await request.json()
+    items = body.get("items", [])
+    model = body.get("model")
+    api_key = body.get("apiKey") or request.headers.get("Authorization", "").replace("Bearer ", "")
+
+    if not api_key:
+        assert key_manager is not None
+        api_key = await key_manager.get_available_key()
+
+    if not all([items, model, api_key]):
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid token")
+
+    texts = [item.get("text") for item in items]
+    client = EmbeddingClient(api_key)
+    embedding_request = EmbeddingRequest(input=texts, model=model)
+
+    try:
+        await client.create_embeddings(embedding_request)
+        # The plugin doesn't seem to care about the response, so we can return a simple success message
+        return {"success": True}
+    except Exception as e:
+        log("ERROR", f"An unexpected error occurred during vector insert: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")

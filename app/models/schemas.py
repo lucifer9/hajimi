@@ -66,3 +66,22 @@ class ChatResponseGemini(BaseModel):
     candidates: Optional[List[Any]] = None
     promptFeedback: Optional[Any] = None
     usageMetadata: Optional[Dict[str, int]] = None
+
+
+class EmbeddingRequest(BaseModel):
+    input: Union[str, List[str]]
+    model: str
+    encoding_format: Optional[str] = "float"
+
+
+class EmbeddingData(BaseModel):
+    object: str = "embedding"
+    embedding: List[float]
+    index: int
+
+
+class EmbeddingResponse(BaseModel):
+    object: str = "list"
+    data: List[EmbeddingData]
+    model: str
+    usage: Usage
