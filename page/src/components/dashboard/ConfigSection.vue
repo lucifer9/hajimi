@@ -3,6 +3,7 @@ import { useDashboardStore } from '../../stores/dashboard'
 import { ref, watch } from 'vue'
 import BasicConfig from './config/BasicConfig.vue'
 import FeaturesConfig from './config/FeaturesConfig.vue'
+import NetworkConfig from './config/NetworkConfig.vue'
 import VersionInfo from './config/VersionInfo.vue'
 import VertexConfig from './config/VertexConfig.vue'
 
@@ -12,6 +13,7 @@ const isExpanded = ref(true)
 // Refs for child components
 const basicConfigRef = ref(null)
 const featuresConfigRef = ref(null)
+const networkConfigRef = ref(null)
 
 // Shared password and messaging
 const sharedPassword = ref('')
@@ -102,6 +104,17 @@ async function handleSaveAllConfigs() {
       // console.warn('FeaturesConfig ref or saveComponentConfigs method not available');
     }
 
+    if (networkConfigRef.value && typeof networkConfigRef.value.saveComponentConfigs === 'function') {
+      const result = await networkConfigRef.value.saveComponentConfigs(sharedPassword.value)
+      if (result.success) {
+        successes.push(result.message)
+      } else {
+        errors.push(result.message)
+      }
+    } else {
+      // console.warn('NetworkConfig ref or saveComponentConfigs method not available');
+    }
+
     if (errors.length > 0) {
       overallErrorMsg.value = errors.join('; ')
     } 
@@ -171,6 +184,7 @@ async function handleSaveAllConfigs() {
         <div v-if="isExpanded" class="fold-content">
           <BasicConfig ref="basicConfigRef" />
           <FeaturesConfig ref="featuresConfigRef" />
+          <NetworkConfig ref="networkConfigRef" />
 
 
           <!-- Shared Save Section -->
@@ -190,7 +204,7 @@ async function handleSaveAllConfigs() {
               @click="handleSaveAllConfigs" 
               :disabled="isOverallSaving"
             >
-              {{ isOverallSaving ? '保存中...' : '保存基本与功能配置' }}
+              {{ isOverallSaving ? '保存中...' : '保存所有配置' }}
             </button>
           </div>
           

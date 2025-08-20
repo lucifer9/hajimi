@@ -6,7 +6,7 @@ from app.services import GeminiClient
 from app.utils import handle_gemini_error, update_api_call_stats,log,openAI_from_text
 from app.utils.response import openAI_from_Gemini,gemini_from_text
 from app.utils.stats import get_api_key_usage
-from app.utils.content_validator import quick_unclosed_check
+from app.utils.content_validator import quick_unclosed_check, quick_required_tags_check
 import app.config.settings as settings
 
 async def stream_response_generator(
@@ -342,11 +342,19 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})        
             return "empty"
 
-        # 检测未闭合标签（仅在启用时检查）
-        if (settings.ENABLE_UNCLOSED_TAG_DETECTION and 
+        # 检测必须标签是否缺失或未闭合（仅在启用时检查）
+        if (settings.ENABLE_REQUIRED_TAG_DETECTION and 
+            response_content and response_content.text and 
+            quick_required_tags_check(response_content.text)):
+            log('warning', f"检测到必须标签缺失或未闭合，需要重试",
+                extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+
+        # 检测指定标签是否闭合（仅在启用时检查）
+        if (settings.ENABLE_SPECIFIC_TAG_DETECTION and 
             response_content and response_content.text and 
             quick_unclosed_check(response_content.text)):
-            log('warning', f"检测到未闭合标签，需要重试",
+            log('warning', f"检测到指定标签未闭合，需要重试",
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
             return "unclosed_tags"
 

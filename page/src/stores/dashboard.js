@@ -131,7 +131,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
       vertexExpressApiKey: data.vertex_express_api_key || false,
       googleCredentialsJson: data.google_credentials_json || false,
       maxRetryNum: data.max_retry_num || 0,
-      maxEmptyResponses: data.max_empty_responses || 0
+      maxEmptyResponses: data.max_empty_responses || 0,
+      // 添加标签检测配置
+      enableSpecificTagDetection: data.enable_specific_tag_detection || false,
+      specificTagsToCheck: data.specific_tags_to_check || '',
+      enableRequiredTagDetection: data.enable_required_tag_detection || false,
+      requiredTags: data.required_tags || '',
+      // 添加网络配置
+      proxyUrl: data.proxy_url || '',
+      geminiApiBaseUrl: data.gemini_api_base_url || '',
+      vertexApiBaseUrl: data.vertex_api_base_url || ''
     }
 
     // 更新API密钥统计

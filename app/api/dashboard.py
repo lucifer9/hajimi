@@ -181,11 +181,34 @@ async def get_dashboard_data():
         "max_retry_num": settings.MAX_RETRY_NUM,
         # 添加空响应重试次数限制
         "max_empty_responses": settings.MAX_EMPTY_RESPONSES,
-        # 添加未闭合标签检测配置
-        "enable_unclosed_tag_detection": settings.ENABLE_UNCLOSED_TAG_DETECTION,
-        # 添加可忽略标签配置
-        "ignorable_tags": settings.IGNORABLE_TAGS_STR,
+        # 添加指定标签闭合检测配置
+        "enable_specific_tag_detection": settings.ENABLE_SPECIFIC_TAG_DETECTION,
+        # 添加需要检测的特定标签配置
+        "specific_tags_to_check": settings.SPECIFIC_TAGS_TO_CHECK_STR,
+        # 添加必须标签检测配置
+        "enable_required_tag_detection": settings.ENABLE_REQUIRED_TAG_DETECTION,
+        # 添加必须出现的标签配置
+        "required_tags": settings.REQUIRED_TAGS_STR,
+        # 添加网络配置
+        "proxy_url": _get_current_proxy_url(),
+        "gemini_api_base_url": settings.GEMINI_API_BASE_URL,
+        "vertex_api_base_url": settings.VERTEX_API_BASE_URL,
+        # 添加日志配置
+        "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
     }
+
+def _get_current_proxy_url():
+    """获取当前生效的代理URL"""
+    if settings.HTTP_PROXY:
+        return settings.HTTP_PROXY
+    elif settings.HTTPS_PROXY:
+        return settings.HTTPS_PROXY
+    elif settings.SOCKS_PROXY:
+        return settings.SOCKS_PROXY
+    elif settings.ALL_PROXY:
+        return settings.ALL_PROXY
+    else:
+        return ""
 
 @dashboard_router.post("/reset-stats")
 async def reset_stats(password_data: dict):
@@ -599,9 +622,9 @@ async def update_config(config_data: dict):
             except ValueError as e:
                 raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
                 
-        elif config_key == "ignorable_tags":
+        elif config_key == "specificTagsToCheck":
             if not isinstance(config_value, str):
-                raise HTTPException(status_code=422, detail="参数类型错误：可忽略标签应为字符串")
+                raise HTTPException(status_code=422, detail="参数类型错误：特定标签列表应为字符串")
                 
             # 解析标签字符串，支持逗号分隔
             new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()]
@@ -610,22 +633,137 @@ async def update_config(config_data: dict):
                 raise HTTPException(status_code=400, detail="至少需要提供一个有效的标签")
             
             # 更新配置
-            settings.IGNORABLE_TAGS_STR = config_value
-            settings.IGNORABLE_TAGS = new_tags
+            settings.SPECIFIC_TAGS_TO_CHECK_STR = config_value
+            settings.SPECIFIC_TAGS_TO_CHECK = new_tags
             
-            log('info', f"可忽略标签已更新为：{config_value}")
+            log('info', f"需要检测的特定标签已更新为：{config_value}")
             log('info', f"解析后的标签列表：{new_tags}")
         
-        elif config_key == "enableUncloseTagDetection":
-            # 更新未闭合标签检测开关
+        elif config_key == "enableSpecificTagDetection":
+            # 更新指定标签闭合检测开关
             try:
                 if isinstance(config_value, str):
                     config_value = config_value.lower() in ["true", "1", "yes"]
                 elif not isinstance(config_value, bool):
                     raise ValueError("参数必须是布尔值")
                 
-                settings.ENABLE_UNCLOSED_TAG_DETECTION = config_value
-                log('info', f"未闭合标签检测已{'启用' if config_value else '禁用'}")
+                settings.ENABLE_SPECIFIC_TAG_DETECTION = config_value
+                log('info', f"指定标签闭合检测已{'启用' if config_value else '禁用'}")
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+        
+        elif config_key == "requiredTags":
+            # 更新必须标签列表
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("必须标签列表必须是字符串")
+                
+                # 解析标签列表，允许空字符串
+                new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()] if config_value.strip() else []
+                
+                # 更新配置
+                settings.REQUIRED_TAGS_STR = config_value
+                settings.REQUIRED_TAGS = new_tags
+                
+                log('info', f"必须标签已更新为：{config_value}")
+                log('info', f"解析后的必须标签列表：{new_tags}")
+            
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
+        
+        elif config_key == "enableRequiredTagDetection":
+            # 更新必须标签检测开关
+            try:
+                if isinstance(config_value, str):
+                    config_value = config_value.lower() in ["true", "1", "yes"]
+                elif not isinstance(config_value, bool):
+                    raise ValueError("参数必须是布尔值")
+                
+                settings.ENABLE_REQUIRED_TAG_DETECTION = config_value
+                log('info', f"必须标签检测已{'启用' if config_value else '禁用'}")
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+        
+        elif config_key == "proxyUrl":
+            # 更新代理配置
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("代理URL必须是字符串")
+                
+                # 清空所有代理配置
+                settings.HTTP_PROXY = ""
+                settings.HTTPS_PROXY = ""
+                settings.SOCKS_PROXY = ""
+                settings.ALL_PROXY = ""
+                
+                # 根据URL协议设置对应的代理
+                if config_value:
+                    config_value = config_value.strip()
+                    if config_value.startswith('http://'):
+                        settings.HTTP_PROXY = config_value
+                        os.environ["HTTP_PROXY"] = config_value
+                    elif config_value.startswith('https://'):
+                        settings.HTTPS_PROXY = config_value
+                        os.environ["HTTPS_PROXY"] = config_value
+                    elif config_value.startswith('socks5://') or config_value.startswith('socks5h://'):
+                        settings.SOCKS_PROXY = config_value
+                        os.environ["SOCKS_PROXY"] = config_value
+                    else:
+                        settings.ALL_PROXY = config_value
+                        os.environ["ALL_PROXY"] = config_value
+                    
+                    log('info', f"代理配置已更新为：{config_value}")
+                else:
+                    # 清空环境变量
+                    for env_var in ["HTTP_PROXY", "HTTPS_PROXY", "SOCKS_PROXY", "ALL_PROXY"]:
+                        if env_var in os.environ:
+                            del os.environ[env_var]
+                    log('info', "代理配置已清空")
+                    
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
+        
+        elif config_key == "geminiApiBaseUrl":
+            # 更新Gemini API基础URL
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("Gemini API基础URL必须是字符串")
+                
+                if config_value and not config_value.startswith(('http://', 'https://')):
+                    raise ValueError("Gemini API基础URL必须以http://或https://开头")
+                
+                settings.GEMINI_API_BASE_URL = config_value or "https://generativelanguage.googleapis.com"
+                log('info', f"Gemini API基础URL已更新为：{settings.GEMINI_API_BASE_URL}")
+                
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
+        
+        elif config_key == "vertexApiBaseUrl":
+            # 更新Vertex API基础URL
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("Vertex API基础URL必须是字符串")
+                
+                if config_value and not config_value.startswith(('http://', 'https://')):
+                    raise ValueError("Vertex API基础URL必须以http://或https://开头")
+                
+                settings.VERTEX_API_BASE_URL = config_value or "https://aiplatform.googleapis.com"
+                log('info', f"Vertex API基础URL已更新为：{settings.VERTEX_API_BASE_URL}")
+                
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
+        
+        elif config_key == "logUpstreamResponses" or config_key == "log_upstream_responses":
+            # 更新上游响应日志记录配置
+            try:
+                if not isinstance(config_value, bool):
+                    raise ValueError("上游响应日志记录必须是布尔值")
+                
+                settings.LOG_UPSTREAM_RESPONSES_ENABLED = config_value
+                # 同时更新环境变量，确保其他模块能够访问到
+                os.environ["LOG_UPSTREAM_RESPONSES"] = "true" if config_value else "false"
+                log('info', f"上游响应日志记录已更新为：{config_value}")
+                
             except ValueError as e:
                 raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
         
@@ -880,125 +1018,3 @@ async def export_valid_api_keys(password_data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取有效API密钥失败：{str(e)}")
 
-@dashboard_router.get("/logging-config")
-async def get_logging_config():
-    """
-    获取当前日志配置状态
-    
-    Returns:
-        dict: 当前日志配置信息
-    """
-    try:
-        return {
-            "status": "success",
-            "config": {
-                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
-                "enable_storage": settings.ENABLE_STORAGE
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取日志配置失败：{str(e)}")
-
-@dashboard_router.post("/logging-config")
-async def update_logging_config(config_data: dict):
-    """
-    动态更新LOG_UPSTREAM_RESPONSES设置
-    
-    Args:
-        config_data (dict): 包含密码和日志配置的字典
-        
-    Returns:
-        dict: 操作结果
-    """
-    try:
-        if not isinstance(config_data, dict):
-            raise HTTPException(status_code=422, detail="请求体格式错误：应为JSON对象")
-            
-        password = config_data.get("password")
-        if not password:
-            raise HTTPException(status_code=400, detail="缺少密码参数")
-            
-        if not isinstance(password, str):
-            raise HTTPException(status_code=422, detail="密码参数类型错误：应为字符串")
-            
-        if not verify_web_password(password):
-            raise HTTPException(status_code=401, detail="密码错误")
-        
-        # 获取要更新的日志配置
-        log_upstream_responses = config_data.get("log_upstream_responses")
-        
-        if log_upstream_responses is None:
-            raise HTTPException(status_code=400, detail="缺少log_upstream_responses参数")
-            
-        if not isinstance(log_upstream_responses, bool):
-            raise HTTPException(status_code=422, detail="log_upstream_responses参数类型错误：应为布尔值")
-        
-        # 同时更新内存变量和环境变量
-        settings.LOG_UPSTREAM_RESPONSES_ENABLED = log_upstream_responses
-        os.environ["LOG_UPSTREAM_RESPONSES"] = "true" if log_upstream_responses else "false"
-        
-        log('info', f"上游响应日志记录已更新为：{log_upstream_responses}")
-        
-        return {
-            "status": "success", 
-            "message": f"日志配置已更新：LOG_UPSTREAM_RESPONSES = {log_upstream_responses}",
-            "config": {
-                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
-                "enable_storage": settings.ENABLE_STORAGE
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新日志配置失败：{str(e)}")
-
-@dashboard_router.post("/test-logging")
-async def test_logging_function(password_data: dict):
-    """
-    测试日志记录功能
-    """
-    try:
-        if not isinstance(password_data, dict):
-            raise HTTPException(status_code=422, detail="请求体格式错误：应为JSON对象")
-            
-        password = password_data.get("password")
-        if not password:
-            raise HTTPException(status_code=400, detail="缺少密码参数")
-            
-        if not verify_web_password(password):
-            raise HTTPException(status_code=401, detail="密码错误")
-        
-        # 测试调用日志记录函数
-        from app.utils.logging import log_upstream_response
-        test_response_data = {
-            "test": "response",
-            "message": "This is a test response",
-            "timestamp": "2025-08-19T15:10:00Z"
-        }
-        
-        log_upstream_response(test_response_data, "test-api-key", "test-model", "test_request")
-        
-        return {
-            "status": "success", 
-            "message": "测试日志记录函数已调用"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"测试日志记录失败：{str(e)}")
-
-@dashboard_router.get("/debug-logging-state")
-async def debug_logging_state():
-    """
-    调试日志记录状态
-    """
-    import app.config.settings as settings
-    import os
-    
-    return {
-        "LOG_UPSTREAM_RESPONSES_ENABLED": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
-        "ENABLE_STORAGE": settings.ENABLE_STORAGE,
-        "STORAGE_DIR": settings.STORAGE_DIR,
-        "LOG_UPSTREAM_RESPONSES_ENV": os.environ.get("LOG_UPSTREAM_RESPONSES", "not_set"),
-        "ENABLE_STORAGE_ENV": os.environ.get("ENABLE_STORAGE", "not_set")
-    }

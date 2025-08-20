@@ -10,7 +10,7 @@ import app.config.settings as settings
 from typing import Literal
 from app.utils.response import gemini_from_text, openAI_from_Gemini, openAI_from_text
 from app.utils.stats import get_api_key_usage
-from app.utils.content_validator import quick_unclosed_check
+from app.utils.content_validator import quick_unclosed_check, quick_required_tags_check
 
 
 # 非流式请求处理函数
@@ -49,11 +49,19 @@ async def process_nonstream_request(
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
         
-        # 检测未闭合标签（仅在启用时检查）
-        if (settings.ENABLE_UNCLOSED_TAG_DETECTION and 
+        # 检测必须标签是否缺失或未闭合（仅在启用时检查）
+        if (settings.ENABLE_REQUIRED_TAG_DETECTION and 
+            response_content and response_content.text and 
+            quick_required_tags_check(response_content.text)):
+            log('warning', f"检测到必须标签缺失或未闭合，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测指定标签是否闭合（仅在启用时检查）
+        if (settings.ENABLE_SPECIFIC_TAG_DETECTION and 
             response_content and response_content.text and 
             quick_unclosed_check(response_content.text)):
-            log('warning', f"检测到未闭合标签，需要重试",
+            log('warning', f"检测到指定标签未闭合，需要重试",
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "unclosed_tags"
         
@@ -121,11 +129,19 @@ async def process_nonstream_request_with_keepalive(
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
         
-        # 检测未闭合标签（仅在启用时检查）
-        if (settings.ENABLE_UNCLOSED_TAG_DETECTION and 
+        # 检测必须标签是否缺失或未闭合（仅在启用时检查）
+        if (settings.ENABLE_REQUIRED_TAG_DETECTION and 
+            response_content and response_content.text and 
+            quick_required_tags_check(response_content.text)):
+            log('warning', f"检测到必须标签缺失或未闭合，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测指定标签是否闭合（仅在启用时检查）
+        if (settings.ENABLE_SPECIFIC_TAG_DETECTION and 
             response_content and response_content.text and 
             quick_unclosed_check(response_content.text)):
-            log('warning', f"检测到未闭合标签，需要重试",
+            log('warning', f"检测到指定标签未闭合，需要重试",
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "unclosed_tags"
         
@@ -195,11 +211,19 @@ async def process_nonstream_request_with_simple_keepalive(
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "empty"
         
-        # 检测未闭合标签（仅在启用时检查）
-        if (settings.ENABLE_UNCLOSED_TAG_DETECTION and 
+        # 检测必须标签是否缺失或未闭合（仅在启用时检查）
+        if (settings.ENABLE_REQUIRED_TAG_DETECTION and 
+            response_content and response_content.text and 
+            quick_required_tags_check(response_content.text)):
+            log('warning', f"检测到必须标签缺失或未闭合，需要重试",
+                extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
+            return "unclosed_tags"
+        
+        # 检测指定标签是否闭合（仅在启用时检查）
+        if (settings.ENABLE_SPECIFIC_TAG_DETECTION and 
             response_content and response_content.text and 
             quick_unclosed_check(response_content.text)):
-            log('warning', f"检测到未闭合标签，需要重试",
+            log('warning', f"检测到指定标签未闭合，需要重试",
                 extra={'key': current_api_key[:8], 'request_type': 'non-stream', 'model': chat_request.model})
             return "unclosed_tags"
         

@@ -17,7 +17,15 @@ EXCLUDED_SETTINGS = [
     "DEFAULT_BLOCKED_MODELS", 
     "PUBLIC_MODE", 
     "DASHBOARD_URL",
-    "version"
+    "version",
+    # 服务器启动配置（通过Web界面修改无意义）
+    "HOST",
+    "PORT",
+    # 字符串形式的重复配置（已有对应的数组形式）
+    "REQUIRED_TAGS_STR",
+    "SPECIFIC_TAGS_TO_CHECK_STR", 
+    "ALLOWED_ORIGINS_STR"
+    # 注意：网络配置（代理和API基础URL）现在支持Web界面配置，已从排除列表中移除
 ]
 
 def save_settings():
@@ -58,10 +66,40 @@ def save_settings():
         
         return settings_file
 
+def merge_list_config(env_value, json_value, separator=','):
+    """合并环境变量和settings.json中的列表配置"""
+    # 从环境变量解析
+    env_items = []
+    if env_value:
+        env_items = [item.strip() for item in env_value.split(separator) if item.strip()]
+    
+    # 从JSON解析
+    json_items = []
+    if json_value:
+        json_items = [item.strip() for item in json_value.split(separator) if item.strip()]
+    
+    # 合并去重，保持顺序
+    all_items = []
+    seen = set()
+    
+    # 先添加环境变量的项目
+    for item in env_items:
+        if item not in seen:
+            all_items.append(item)
+            seen.add(item)
+    
+    # 再添加JSON的项目
+    for item in json_items:
+        if item not in seen:
+            all_items.append(item)
+            seen.add(item)
+    
+    return separator.join(all_items)
+
 def load_settings():
     """
-    从JSON文件中加载设置并更新settings模块，
-    排除特定的配置项，并合并GEMINI_API_KEYS
+    从JSON文件中加载设置并更新settings模块
+    新逻辑：settings.json优先，5个特殊配置项进行合并
     """
     if settings.ENABLE_STORAGE:
         # 设置JSON文件路径
@@ -77,54 +115,75 @@ def load_settings():
             with open(settings_file, 'r', encoding='utf-8') as f:
                 loaded_settings = json.load(f)
             
-            # 保存当前环境变量中的GEMINI_API_KEYS
-            current_api_keys = []
-            if hasattr(settings, 'GEMINI_API_KEYS') and settings.GEMINI_API_KEYS:
-                current_api_keys = settings.GEMINI_API_KEYS.split(',')
-                current_api_keys = [key.strip() for key in current_api_keys if key.strip()]
-            
-            # 保存当前环境变量中的GOOGLE_CREDENTIALS_JSON和VERTEX_EXPRESS_API_KEY
-            current_google_credentials_json = settings.GOOGLE_CREDENTIALS_JSON if hasattr(settings, 'GOOGLE_CREDENTIALS_JSON') else ""
-            current_vertex_express_api_key = settings.VERTEX_EXPRESS_API_KEY if hasattr(settings, 'VERTEX_EXPRESS_API_KEY') else ""
-            
             # 更新settings模块中的变量，但排除特定配置项
             for name, value in loaded_settings.items():
                 if hasattr(settings, name) and name not in EXCLUDED_SETTINGS:
-                    # 特殊处理GEMINI_API_KEYS，进行合并去重
-                    if name == "GEMINI_API_KEYS":
-                        loaded_api_keys = value.split(',') if value else []
-                        loaded_api_keys = [key.strip() for key in loaded_api_keys if key.strip()]
-                        all_keys = list(set(current_api_keys + loaded_api_keys))
-                        setattr(settings, name, ','.join(all_keys))
-                    # 特殊处理GOOGLE_CREDENTIALS_JSON，如果当前环境变量中有值，则优先使用环境变量中的值
-                    elif name == "GOOGLE_CREDENTIALS_JSON":
-                        # 检查当前值是否为空（None、空字符串、只有空白字符，或者是"''"这样的空引号）
-                        is_empty = (not current_google_credentials_json or 
-                                   not current_google_credentials_json.strip() or 
-                                   current_google_credentials_json.strip() in ['""', "''"])
-                        log('debug', f"is_empty检查结果: {is_empty}")
-                        if is_empty:
-                            log('debug', f"当前GOOGLE_CREDENTIALS_JSON为空，将使用持久化的值")
-                            setattr(settings, name, value)
-                            # 更新环境变量，确保其他模块能够访问到
-                            if value:  # 只有当value不为空时才设置环境变量
-                                os.environ["GOOGLE_CREDENTIALS_JSON"] = value
-                                log('info', f"从持久化存储加载了GOOGLE_CREDENTIALS_JSON配置")
-                            else:
-                                log('warning', f"持久化的GOOGLE_CREDENTIALS_JSON值为空")
+                    # 对于需要合并的配置项
+                    if name in settings.MERGE_CONFIGS:
+                        # 获取当前环境变量值，注意不同配置项可能有不同的属性名
+                        if name == "SPECIFIC_TAGS_TO_CHECK":
+                            current_value = getattr(settings, "SPECIFIC_TAGS_TO_CHECK_STR", "")
+                        elif name == "REQUIRED_TAGS":
+                            current_value = getattr(settings, "REQUIRED_TAGS_STR", "")
+                        elif name == "ALLOWED_ORIGINS":
+                            current_value = getattr(settings, "ALLOWED_ORIGINS_STR", "")
                         else:
-                            log('debug', f"当前GOOGLE_CREDENTIALS_JSON不为空，保持现有值")
-                    # 特殊处理VERTEX_EXPRESS_API_KEY，如果当前环境变量中有值，则优先使用环境变量中的值
-                    elif name == "VERTEX_EXPRESS_API_KEY":
-                        # 检查当前值是否为空（None、空字符串或只有空白字符）
-                        if not current_vertex_express_api_key or not current_vertex_express_api_key.strip():
+                            current_value = getattr(settings, name, "")
+                        
+                        # 执行合并
+                        merged_value = merge_list_config(current_value, value)
+                        
+                        # 根据不同配置项设置相应的属性
+                        if name == "SPECIFIC_TAGS_TO_CHECK":
+                            setattr(settings, "SPECIFIC_TAGS_TO_CHECK_STR", merged_value)
+                            setattr(settings, "SPECIFIC_TAGS_TO_CHECK", [tag.strip() for tag in merged_value.split(',') if tag.strip()])
+                        elif name == "REQUIRED_TAGS":
+                            setattr(settings, "REQUIRED_TAGS_STR", merged_value)
+                            setattr(settings, "REQUIRED_TAGS", [tag.strip() for tag in merged_value.split(',') if tag.strip()])
+                        elif name == "ALLOWED_ORIGINS":
+                            setattr(settings, "ALLOWED_ORIGINS_STR", merged_value)
+                            setattr(settings, "ALLOWED_ORIGINS", [origin.strip() for origin in merged_value.split(',') if origin.strip()])
+                        else:
+                            # 对于GEMINI_API_KEYS和INVALID_API_KEYS直接合并
+                            setattr(settings, name, merged_value)
+                        
+                        log('info', f"合并配置 {name}: 环境变量={current_value} + JSON={value} = {merged_value}")
+                    
+                    # 特殊处理GOOGLE_CREDENTIALS_JSON，settings.json优先但环境变量不为空时保留
+                    elif name == "GOOGLE_CREDENTIALS_JSON":
+                        current_value = getattr(settings, name, "")
+                        # 检查当前环境变量值是否为空
+                        is_empty = (not current_value or 
+                                   not current_value.strip() or 
+                                   current_value.strip() in ['""', "''"])
+                        if is_empty:
+                            # 环境变量为空，使用settings.json的值
                             setattr(settings, name, value)
-                            # 更新环境变量，确保其他模块能够访问到
-                            if value:  # 只有当value不为空时才设置环境变量
-                                os.environ["VERTEX_EXPRESS_API_KEY"] = value
-                                log('info', f"从持久化存储加载了VERTEX_EXPRESS_API_KEY配置")
+                            if value:
+                                os.environ["GOOGLE_CREDENTIALS_JSON"] = value
+                                log('info', f"从settings.json加载了GOOGLE_CREDENTIALS_JSON配置")
+                        else:
+                            # 环境变量不为空，settings.json优先
+                            setattr(settings, name, value)
+                            if value:
+                                os.environ["GOOGLE_CREDENTIALS_JSON"] = value
+                                log('info', f"settings.json优先：更新GOOGLE_CREDENTIALS_JSON配置")
+                            else:
+                                log('info', f"settings.json为空，保留环境变量GOOGLE_CREDENTIALS_JSON")
+                    
+                    # 特殊处理VERTEX_EXPRESS_API_KEY，settings.json优先
+                    elif name == "VERTEX_EXPRESS_API_KEY":
+                        setattr(settings, name, value)
+                        if value:
+                            os.environ["VERTEX_EXPRESS_API_KEY"] = value
+                            log('info', f"settings.json优先：更新VERTEX_EXPRESS_API_KEY配置")
+                        else:
+                            log('info', f"settings.json为空，清空VERTEX_EXPRESS_API_KEY")
+                    
+                    # 其他配置项：settings.json优先
                     else:
                         setattr(settings, name, value)
+                        log('debug', f"settings.json优先：{name} = {value}")
             
             # 在加载完设置后，检查是否需要刷新模型配置
             try:

@@ -16,8 +16,10 @@ const localConfig = reactive({
   concurrentRequests: 1, // Default to 1 or a sensible minimum
   increaseConcurrentOnFailure: 0,
   maxConcurrentRequests: 1, // Default to 1 or a sensible minimum
-  enableUncloseTagDetection: true, // 未闭合标签检测开关
-  ignorableTags: '' // 可忽略标签配置
+  enableSpecificTagDetection: false, // 指定标签闭合检测开关
+  specificTagsToCheck: '', // 需要检测闭合的特定标签配置
+  enableRequiredTagDetection: false, // 必须标签检测开关
+  requiredTags: '' // 必须出现的标签配置
 })
 
 const populatedFromStore = ref(false);
@@ -35,8 +37,10 @@ watch(
     storeConcurrentRequests: dashboardStore.config.concurrentRequests,
     storeIncreaseConcurrentOnFailure: dashboardStore.config.increaseConcurrentOnFailure,
     storeMaxConcurrentRequests: dashboardStore.config.maxConcurrentRequests,
-    storeEnableUncloseTagDetection: dashboardStore.config.enableUncloseTagDetection,
-    storeIgnorableTags: dashboardStore.config.ignorableTags,
+    storeEnableSpecificTagDetection: dashboardStore.config.enableSpecificTagDetection,
+    storeSpecificTagsToCheck: dashboardStore.config.specificTagsToCheck,
+    storeEnableRequiredTagDetection: dashboardStore.config.enableRequiredTagDetection,
+    storeRequiredTags: dashboardStore.config.requiredTags,
     configIsActuallyLoaded: dashboardStore.isConfigLoaded, // 观察加载状态
   }),
   (newValues) => {
@@ -51,8 +55,10 @@ watch(
       localConfig.concurrentRequests = newValues.storeConcurrentRequests;
       localConfig.increaseConcurrentOnFailure = newValues.storeIncreaseConcurrentOnFailure;
       localConfig.maxConcurrentRequests = newValues.storeMaxConcurrentRequests;
-      localConfig.enableUncloseTagDetection = newValues.storeEnableUncloseTagDetection;
-      localConfig.ignorableTags = newValues.storeIgnorableTags || '';
+      localConfig.enableSpecificTagDetection = newValues.storeEnableSpecificTagDetection;
+      localConfig.specificTagsToCheck = newValues.storeSpecificTagsToCheck || '';
+      localConfig.enableRequiredTagDetection = newValues.storeEnableRequiredTagDetection;
+      localConfig.requiredTags = newValues.storeRequiredTags || '';
       populatedFromStore.value = true;
     }
   },
@@ -157,14 +163,14 @@ defineExpose({
         </div>
       </div>
       
-      <!-- 未闭合标签检测开关 -->
+      <!-- 指定标签闭合检测开关 -->
       <div class="config-row">
         <div class="config-group">
-          <label class="config-label">未闭合标签检测</label>
+          <label class="config-label">指定标签闭合检测</label>
           <div class="toggle-wrapper">
-            <input type="checkbox" class="toggle" id="enableUncloseTagDetection" v-model="localConfig.enableUncloseTagDetection">
-            <label for="enableUncloseTagDetection" class="toggle-label">
-              <span class="toggle-text">{{ getBooleanText(localConfig.enableUncloseTagDetection) }}</span>
+            <input type="checkbox" class="toggle" id="enableSpecificTagDetection" v-model="localConfig.enableSpecificTagDetection">
+            <label for="enableSpecificTagDetection" class="toggle-label">
+              <span class="toggle-text">{{ getBooleanText(localConfig.enableSpecificTagDetection) }}</span>
             </label>
           </div>
         </div>
@@ -172,18 +178,48 @@ defineExpose({
         <div class="config-group"></div>
       </div>
       
-      <!-- 可忽略标签配置 -->
+      <!-- 需要检测闭合的特定标签配置 -->
       <div class="config-row">
         <div class="config-group full-width">
-          <label class="config-label">未闭合标签检测可忽略标签</label>
+          <label class="config-label">需要检测闭合的标签</label>
           <input 
             type="text" 
             class="config-input" 
-            v-model="localConfig.ignorableTags" 
+            v-model="localConfig.specificTagsToCheck" 
             placeholder="请输入逗号分隔的标签名，如：think,thinking,assess,details"
-            :disabled="!localConfig.enableUncloseTagDetection"
+            :disabled="!localConfig.enableSpecificTagDetection"
           >
-          <small class="config-help">这些标签内的未闭合标签将被忽略，不会触发重试（仅当未闭合标签检测启用时生效）</small>
+          <small class="config-help">只检测这些指定标签是否闭合，忽略其他所有标签（仅当指定标签闭合检测启用时生效）</small>
+        </div>
+      </div>
+      
+      <!-- 必须标签检测开关 -->
+      <div class="config-row">
+        <div class="config-group">
+          <label class="config-label">必须标签检测</label>
+          <div class="toggle-wrapper">
+            <input type="checkbox" class="toggle" id="enableRequiredTagDetection" v-model="localConfig.enableRequiredTagDetection">
+            <label for="enableRequiredTagDetection" class="toggle-label">
+              <span class="toggle-text">{{ getBooleanText(localConfig.enableRequiredTagDetection) }}</span>
+            </label>
+          </div>
+        </div>
+        <div class="config-group"></div>
+        <div class="config-group"></div>
+      </div>
+      
+      <!-- 必须出现的标签配置 -->
+      <div class="config-row">
+        <div class="config-group full-width">
+          <label class="config-label">必须出现的标签</label>
+          <input 
+            type="text" 
+            class="config-input" 
+            v-model="localConfig.requiredTags" 
+            placeholder="请输入逗号分隔的标签名，如：thinking,summary"
+            :disabled="!localConfig.enableRequiredTagDetection"
+          >
+          <small class="config-help">这些标签必须在响应中出现且正确闭合，否则会触发重试（仅当必须标签检测启用时生效）</small>
         </div>
       </div>
       

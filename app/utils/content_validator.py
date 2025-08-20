@@ -24,9 +24,9 @@ def _remove_ignorable_tag_blocks(content: str, ignorable_tags: List[str] = None)
     if not content:
         return content
     
-    # 如果没有指定标签列表，使用配置中的标签
+    # 如果没有指定标签列表，使用配置中的标签（保持向后兼容）
     if ignorable_tags is None:
-        ignorable_tags = settings.IGNORABLE_TAGS
+        ignorable_tags = getattr(settings, 'IGNORABLE_TAGS', getattr(settings, 'SPECIFIC_TAGS_TO_CHECK', []))
     
     # 处理所有可忽略标签
     for tag_name in ignorable_tags:
@@ -116,9 +116,87 @@ def _remove_tag_blocks(content: str, tag_name: str) -> str:
     return ''.join(result_parts)
 
 
+def has_unclosed_specific_tags(content: str, tags_to_check: List[str] = None) -> bool:
+    """
+    检测指定标签列表中的标签是否未闭合
+    只检测用户关心的特定标签，忽略其他所有标签
+    
+    Args:
+        content: 要检测的文本内容
+        tags_to_check: 需要检测的标签列表，如果为None则使用配置中的标签
+        
+    Returns:
+        bool: True表示指定标签中有未闭合的，False表示指定标签都正确闭合或无相关标签
+    """
+    if not content or not content.strip():
+        return False
+    
+    # 快速预检：如果内容中没有标签，直接返回
+    if '<' not in content or '>' not in content:
+        return False
+    
+    # 如果没有指定标签列表，使用配置中的标签
+    if tags_to_check is None:
+        tags_to_check = settings.SPECIFIC_TAGS_TO_CHECK
+    
+    # 如果没有配置要检测的标签，直接返回
+    if not tags_to_check:
+        return False
+    
+    try:
+        # 移除HTML注释，避免注释中的标签影响检测
+        content_no_comments = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
+        
+        # 移除自闭合标签 <tag/> 和 <tag />
+        content_no_self_closing = re.sub(r'<[^>]+/\s*>', '', content_no_comments)
+        
+        # 使用字典记录每种标签的开启次数
+        tag_counts = {}
+        
+        # 将要检测的标签转为小写以便比较
+        tags_to_check_lower = [tag.lower() for tag in tags_to_check]
+        
+        # 匹配任意标签名，支持自定义标签
+        # 标签名规则：以字母开头，可包含字母、数字、连字符、下划线
+        tag_pattern = r'<(/?)([a-zA-Z][a-zA-Z0-9_-]*)[^>]*>'
+        
+        for match in re.finditer(tag_pattern, content_no_self_closing):
+            is_closing = bool(match.group(1))  # 检查是否是闭合标签 </tag>
+            tag_name = match.group(2).lower()  # 标签名，转为小写统一处理
+            
+            # 只处理需要检测的标签
+            if tag_name not in tags_to_check_lower:
+                continue
+            
+            # 初始化标签计数器
+            if tag_name not in tag_counts:
+                tag_counts[tag_name] = 0
+            
+            if not is_closing:  # 开始标签 <tag>
+                tag_counts[tag_name] += 1
+            else:  # 结束标签 </tag>
+                tag_counts[tag_name] -= 1
+                # 如果某个标签的计数变成负数，重置为0
+                # 因为根据实际情况，几乎不会出现"只有闭合标签"的情况
+                if tag_counts[tag_name] < 0:
+                    tag_counts[tag_name] = 0
+        
+        # 检查是否有任何指定标签未闭合（计数 > 0）
+        for tag_name, count in tag_counts.items():
+            if count > 0:
+                return True  # 发现第一个未闭合的指定标签就返回
+        
+        return False
+        
+    except Exception as e:
+        # 如果检测过程中出现异常，记录日志但不阻断流程
+        log('warning', f"指定标签闭合检测异常: {str(e)}")
+        return False  # 异常情况下认为没有问题，避免误判
+
+
 def has_unclosed_tags(content: str) -> bool:
     """
-    检测内容中是否有未闭合标签
+    检测内容中是否有未闭合标签（保持向后兼容的旧函数）
     
     专门针对以下场景优化：
     - 绝大多数情况是开始标签没有对应的闭合标签
@@ -186,52 +264,160 @@ def has_unclosed_tags(content: str) -> bool:
         return False  # 异常情况下认为没有问题，避免误判
 
 
+def has_missing_or_unclosed_required_tags(content: str, required_tags: List[str] = None) -> bool:
+    """
+    检测必须标签是否缺失或未正确闭合
+    所有必须标签都必须存在且正确闭合
+    
+    Args:
+        content: 要检测的文本内容
+        required_tags: 必须存在的标签列表，如果为None则使用配置中的标签
+        
+    Returns:
+        bool: True表示有缺失或未闭合的必须标签，False表示所有必须标签都存在且正确闭合
+    """
+    if not content or not content.strip():
+        # 如果内容为空，但有必须标签要求，则认为缺失
+        if required_tags is None:
+            required_tags = settings.REQUIRED_TAGS
+        return len(required_tags) > 0
+    
+    # 如果没有指定必须标签列表，使用配置中的标签
+    if required_tags is None:
+        required_tags = settings.REQUIRED_TAGS
+    
+    # 如果没有配置必须标签，直接返回
+    if not required_tags:
+        return False
+    
+    # 快速预检：如果内容中没有标签，但要求必须标签，则缺失
+    if '<' not in content or '>' not in content:
+        return True
+    
+    try:
+        # 移除HTML注释，避免注释中的标签影响检测
+        content_no_comments = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
+        
+        # 移除自闭合标签 <tag/> 和 <tag />
+        content_no_self_closing = re.sub(r'<[^>]+/\s*>', '', content_no_comments)
+        
+        # 使用字典记录每种标签的开启次数
+        tag_counts = {}
+        
+        # 将必须标签转为小写以便比较
+        required_tags_lower = [tag.lower() for tag in required_tags]
+        
+        # 初始化所有必须标签的计数为0
+        for tag in required_tags_lower:
+            tag_counts[tag] = 0
+        
+        # 匹配任意标签名，支持自定义标签
+        # 标签名规则：以字母开头，可包含字母、数字、连字符、下划线
+        tag_pattern = r'<(/?)([a-zA-Z][a-zA-Z0-9_-]*)[^>]*>'
+        
+        for match in re.finditer(tag_pattern, content_no_self_closing):
+            is_closing = bool(match.group(1))  # 检查是否是闭合标签 </tag>
+            tag_name = match.group(2).lower()  # 标签名，转为小写统一处理
+            
+            # 只处理必须的标签
+            if tag_name not in required_tags_lower:
+                continue
+            
+            if not is_closing:  # 开始标签 <tag>
+                tag_counts[tag_name] += 1
+            else:  # 结束标签 </tag>
+                tag_counts[tag_name] -= 1
+                # 如果某个标签的计数变成负数，重置为0
+                if tag_counts[tag_name] < 0:
+                    tag_counts[tag_name] = 0
+        
+        # 检查所有必须标签是否都存在且正确闭合
+        for tag_name in required_tags_lower:
+            count = tag_counts.get(tag_name, 0)
+            if count != 0:  # 不等于0说明未正确闭合或未出现
+                return True  # 发现未正确闭合的必须标签
+        
+        # 检查所有必须标签是否都至少出现过一次
+        for tag_name in required_tags_lower:
+            # 重新扫描检查标签是否至少出现过一次
+            start_pattern = fr'<{tag_name}\b[^>]*>'
+            if not re.search(start_pattern, content_no_self_closing, flags=re.IGNORECASE):
+                return True  # 发现缺失的必须标签
+        
+        return False
+        
+    except Exception as e:
+        # 如果检测过程中出现异常，记录日志但保守处理
+        log('warning', f"必须标签检测异常: {str(e)}")
+        return True  # 异常情况下认为有问题，触发重试
+
+
 def quick_unclosed_check(content: str) -> bool:
     """
     快速检测版本，用于性能敏感场景
+    现在使用新的指定标签检测逻辑
     
     Args:
         content: 要检测的文本内容
         
     Returns:
-        bool: True表示有未闭合标签，False表示没有问题
+        bool: True表示有未闭合的指定标签，False表示没有问题
     """
     # 预检查：无内容或无标签直接返回
     if not content or '<' not in content:
         return False
     
-    return has_unclosed_tags(content)
+    return has_unclosed_specific_tags(content)
+
+
+def quick_required_tags_check(content: str) -> bool:
+    """
+    快速必须标签检测版本，用于性能敏感场景
+    
+    Args:
+        content: 要检测的文本内容
+        
+    Returns:
+        bool: True表示有缺失或未闭合的必须标签，False表示没有问题
+    """
+    return has_missing_or_unclosed_required_tags(content)
 
 
 def debug_unclosed_tags(content: str) -> Tuple[bool, Dict[str, int]]:
     """
-    调试版本：返回详细的标签统计信息
+    调试版本：返回详细的指定标签统计信息
     用于日志记录和问题排查
     
     Args:
         content: 要检测的文本内容
         
     Returns:
-        Tuple[bool, Dict[str, int]]: (是否有未闭合标签, 未闭合标签的详细信息)
+        Tuple[bool, Dict[str, int]]: (是否有未闭合的指定标签, 未闭合指定标签的详细信息)
     """
     if not content or '<' not in content:
         return False, {}
     
     try:
+        # 获取要检测的标签列表
+        tags_to_check = settings.SPECIFIC_TAGS_TO_CHECK
+        if not tags_to_check:
+            return False, {}
+        
         # 处理内容
         content_no_comments = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
-        
-        # 移除可忽略标签块，忽略其中的标签
-        content_no_ignorable = _remove_ignorable_tag_blocks(content_no_comments)
-        
-        content_no_self_closing = re.sub(r'<[^>]+/\s*>', '', content_no_ignorable)
+        content_no_self_closing = re.sub(r'<[^>]+/\s*>', '', content_no_comments)
         
         tag_counts = {}
+        tags_to_check_lower = [tag.lower() for tag in tags_to_check]
         tag_pattern = r'<(/?)([a-zA-Z][a-zA-Z0-9_-]*)[^>]*>'
         
         for match in re.finditer(tag_pattern, content_no_self_closing):
             is_closing = bool(match.group(1))
             tag_name = match.group(2).lower()
+            
+            # 只处理需要检测的标签
+            if tag_name not in tags_to_check_lower:
+                continue
             
             if tag_name not in tag_counts:
                 tag_counts[tag_name] = 0
@@ -243,7 +429,7 @@ def debug_unclosed_tags(content: str) -> Tuple[bool, Dict[str, int]]:
                 if tag_counts[tag_name] < 0:
                     tag_counts[tag_name] = 0
         
-        # 找出未闭合的标签
+        # 找出未闭合的指定标签
         unclosed_tags = {tag: count for tag, count in tag_counts.items() if count > 0}
         has_unclosed = len(unclosed_tags) > 0
         
