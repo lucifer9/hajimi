@@ -140,7 +140,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
       // 添加网络配置
       proxyUrl: data.proxy_url || '',
       geminiApiBaseUrl: data.gemini_api_base_url || '',
-      vertexApiBaseUrl: data.vertex_api_base_url || ''
+      vertexApiBaseUrl: data.vertex_api_base_url || '',
+      // 添加日志配置
+      logUpstreamResponses: data.log_upstream_responses || false
     }
 
     // 更新API密钥统计

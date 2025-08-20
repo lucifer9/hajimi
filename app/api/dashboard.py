@@ -627,10 +627,7 @@ async def update_config(config_data: dict):
                 raise HTTPException(status_code=422, detail="参数类型错误：特定标签列表应为字符串")
                 
             # 解析标签字符串，支持逗号分隔
-            new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()]
-            
-            if not new_tags:
-                raise HTTPException(status_code=400, detail="至少需要提供一个有效的标签")
+            new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()] if config_value.strip() else []
             
             # 更新配置
             settings.SPECIFIC_TAGS_TO_CHECK_STR = config_value
