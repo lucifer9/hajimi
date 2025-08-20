@@ -763,6 +763,90 @@ async def update_config(config_data: dict):
                 
             except ValueError as e:
                 raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+                
+        elif config_key == "enable_specific_tag_detection":
+            # 更新指定标签闭合检测开关（下划线格式）
+            try:
+                if isinstance(config_value, str):
+                    config_value = config_value.lower() in ["true", "1", "yes"]
+                elif not isinstance(config_value, bool):
+                    raise ValueError("参数必须是布尔值")
+                
+                settings.ENABLE_SPECIFIC_TAG_DETECTION = config_value
+                log('info', f"指定标签闭合检测已{'启用' if config_value else '禁用'}")
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+                
+        elif config_key == "enable_required_tag_detection":
+            # 更新必须标签检测开关（下划线格式）
+            try:
+                if isinstance(config_value, str):
+                    config_value = config_value.lower() in ["true", "1", "yes"]
+                elif not isinstance(config_value, bool):
+                    raise ValueError("参数必须是布尔值")
+                
+                settings.ENABLE_REQUIRED_TAG_DETECTION = config_value
+                log('info', f"必须标签检测已{'启用' if config_value else '禁用'}")
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
+                
+        elif config_key == "required_tags":
+            # 更新必须标签列表（下划线格式）
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("必须标签列表必须是字符串")
+                
+                # 解析标签列表，允许空字符串
+                new_tags = [tag.strip() for tag in config_value.split(',') if tag.strip()] if config_value.strip() else []
+                
+                # 更新配置
+                settings.REQUIRED_TAGS_STR = config_value
+                settings.REQUIRED_TAGS = new_tags
+                
+                log('info', f"必须标签已更新为：{config_value}")
+                log('info', f"解析后的必须标签列表：{new_tags}")
+            
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
+                
+        elif config_key == "proxy_url":
+            # 更新代理配置（下划线格式）
+            try:
+                if not isinstance(config_value, str):
+                    raise ValueError("代理URL必须是字符串")
+                
+                # 清空所有代理配置
+                settings.HTTP_PROXY = ""
+                settings.HTTPS_PROXY = ""
+                settings.SOCKS_PROXY = ""
+                settings.ALL_PROXY = ""
+                
+                # 根据URL协议设置对应的代理
+                if config_value:
+                    config_value = config_value.strip()
+                    if config_value.startswith('http://'):
+                        settings.HTTP_PROXY = config_value
+                        os.environ["HTTP_PROXY"] = config_value
+                    elif config_value.startswith('https://'):
+                        settings.HTTPS_PROXY = config_value
+                        os.environ["HTTPS_PROXY"] = config_value
+                    elif config_value.startswith('socks5://') or config_value.startswith('socks5h://'):
+                        settings.SOCKS_PROXY = config_value
+                        os.environ["SOCKS_PROXY"] = config_value
+                    else:
+                        settings.ALL_PROXY = config_value
+                        os.environ["ALL_PROXY"] = config_value
+                    
+                    log('info', f"代理配置已更新为：{config_value}")
+                else:
+                    # 清空环境变量
+                    for env_var in ["HTTP_PROXY", "HTTPS_PROXY", "SOCKS_PROXY", "ALL_PROXY"]:
+                        if env_var in os.environ:
+                            del os.environ[env_var]
+                    log('info', "代理配置已清空")
+                    
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数格式错误：{str(e)}")
         
         else:
             raise HTTPException(status_code=400, detail=f"不支持的配置项：{config_key}")
@@ -1014,4 +1098,75 @@ async def export_valid_api_keys(password_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取有效API密钥失败：{str(e)}")
+
+@dashboard_router.get("/logging-config")
+async def get_logging_config():
+    """
+    获取日志配置信息
+    
+    Returns:
+        dict: 日志配置信息
+    """
+    try:
+        return {
+            "status": "success",
+            "config": {
+                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
+                "enable_storage": settings.ENABLE_STORAGE
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取日志配置失败：{str(e)}")
+
+@dashboard_router.post("/logging-config")
+async def update_logging_config(request_data: dict):
+    """
+    更新日志配置
+    
+    Args:
+        request_data (dict): 包含密码和日志配置的字典
+        
+    Returns:
+        dict: 操作结果
+    """
+    try:
+        if not isinstance(request_data, dict):
+            raise HTTPException(status_code=422, detail="请求体格式错误：应为JSON对象")
+            
+        password = request_data.get("password")
+        if not password:
+            raise HTTPException(status_code=400, detail="缺少密码参数")
+            
+        if not isinstance(password, str):
+            raise HTTPException(status_code=422, detail="密码参数类型错误：应为字符串")
+            
+        if not verify_web_password(password):
+            raise HTTPException(status_code=401, detail="密码错误")
+        
+        # 获取日志配置参数
+        log_upstream_responses = request_data.get("log_upstream_responses")
+        if log_upstream_responses is not None:
+            if not isinstance(log_upstream_responses, bool):
+                raise HTTPException(status_code=422, detail="日志记录参数类型错误：应为布尔值")
+            
+            # 更新配置
+            settings.LOG_UPSTREAM_RESPONSES_ENABLED = log_upstream_responses
+            os.environ["LOG_UPSTREAM_RESPONSES"] = "true" if log_upstream_responses else "false"
+            log('info', f"上游响应日志记录已更新为：{log_upstream_responses}")
+        
+        # 保存设置
+        save_settings()
+        
+        return {
+            "status": "success",
+            "message": "日志配置更新成功",
+            "config": {
+                "log_upstream_responses": settings.LOG_UPSTREAM_RESPONSES_ENABLED,
+                "enable_storage": settings.ENABLE_STORAGE
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新日志配置失败：{str(e)}")
 
