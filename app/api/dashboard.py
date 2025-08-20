@@ -181,6 +181,8 @@ async def get_dashboard_data():
         "max_retry_num": settings.MAX_RETRY_NUM,
         # 添加空响应重试次数限制
         "max_empty_responses": settings.MAX_EMPTY_RESPONSES,
+        # 添加未闭合标签检测配置
+        "enable_unclosed_tag_detection": settings.ENABLE_UNCLOSED_TAG_DETECTION,
         # 添加可忽略标签配置
         "ignorable_tags": settings.IGNORABLE_TAGS_STR,
     }
@@ -613,6 +615,19 @@ async def update_config(config_data: dict):
             
             log('info', f"可忽略标签已更新为：{config_value}")
             log('info', f"解析后的标签列表：{new_tags}")
+        
+        elif config_key == "enableUncloseTagDetection":
+            # 更新未闭合标签检测开关
+            try:
+                if isinstance(config_value, str):
+                    config_value = config_value.lower() in ["true", "1", "yes"]
+                elif not isinstance(config_value, bool):
+                    raise ValueError("参数必须是布尔值")
+                
+                settings.ENABLE_UNCLOSED_TAG_DETECTION = config_value
+                log('info', f"未闭合标签检测已{'启用' if config_value else '禁用'}")
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"参数类型错误：{str(e)}")
         
         else:
             raise HTTPException(status_code=400, detail=f"不支持的配置项：{config_key}")

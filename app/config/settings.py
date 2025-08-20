@@ -2,7 +2,7 @@ import os
 import pathlib
 import logging
 from datetime import datetime, timedelta
-import asyncio 
+import asyncio
 
 # ---------- 以下是基础配置信息 ----------
 
@@ -21,10 +21,10 @@ SOCKS_PROXY = os.environ.get("SOCKS_PROXY", "")
 ALL_PROXY = os.environ.get("ALL_PROXY", "")
 
 # 调用本项目时使用的密码
-PASSWORD = os.environ.get("PASSWORD", "123").strip('"') 
+PASSWORD = os.environ.get("PASSWORD", "123").strip('"')
 
 # 网页配置密码，设置后，在网页修改配置时使用 WEB_PASSWORD 而不是上面的 PASSWORD
-WEB_PASSWORD = os.environ.get("WEB_PASSWORD", PASSWORD).strip('"') 
+WEB_PASSWORD = os.environ.get("WEB_PASSWORD", PASSWORD).strip('"')
 
 # API密钥
 GEMINI_API_KEYS = os.environ.get("GEMINI_API_KEYS", "")
@@ -78,10 +78,13 @@ MAX_EMPTY_RESPONSES = int(os.environ.get("MAX_EMPTY_RESPONSES", "5"))  # 默认�
 MAX_UNCLOSED_TAG_RETRIES = int(os.environ.get("MAX_UNCLOSED_TAG_RETRIES", "5"))  # 默认最多允许5次未闭合标签重试
 
 # 响应长度检测配置
-MIN_RESPONSE_LENGTH = int(os.environ.get("MIN_RESPONSE_LENGTH", "10"))  # 默认最短响应长度
+MIN_RESPONSE_LENGTH = int(os.environ.get("MIN_RESPONSE_LENGTH", "100"))  # 默认最短响应长度
 
 # 上游响应日志记录配置（内存缓存，避免每次都读取环境变量）
 LOG_UPSTREAM_RESPONSES_ENABLED = os.environ.get("LOG_UPSTREAM_RESPONSES", "false").lower() in ["true", "1", "yes"]
+
+# 未闭合标签检测配置
+ENABLE_UNCLOSED_TAG_DETECTION = os.environ.get("ENABLE_UNCLOSED_TAG_DETECTION", "false").lower() in ["true", "1", "yes"]
 
 # 未闭合标签检测中可忽略的标签配置
 IGNORABLE_TAGS_STR = os.environ.get("IGNORABLE_TAGS", "assess,your_choice,Status_block,tableThink,tableEdit,abstract,UpdateVariable,INDRS,details,think,thinking")
@@ -91,7 +94,7 @@ IGNORABLE_TAGS = [tag.strip() for tag in IGNORABLE_TAGS_STR.split(',') if tag.st
 
 # 访问限制
 MAX_RETRY_NUM = int(os.environ.get("MAX_RETRY_NUM", "15")) # 请求时的最大总轮询 key 数
-MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "30")) 
+MAX_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_REQUESTS_PER_MINUTE", "30"))
 MAX_REQUESTS_PER_DAY_PER_IP = int(os.environ.get("MAX_REQUESTS_PER_DAY_PER_IP", "600"))
 
 # API密钥使用限制
@@ -137,7 +140,7 @@ api_call_stats = {
 }
 
 # 用于保护 api_call_stats 并发访问的锁
-stats_lock = asyncio.Lock() 
+stats_lock = asyncio.Lock()
 
 # 日志配置
 logging.getLogger("uvicorn").disabled = True

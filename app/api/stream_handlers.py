@@ -342,8 +342,10 @@ async def handle_fake_streaming(api_key, chat_request, contents, response_cache_
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})        
             return "empty"
 
-        # 检测未闭合标签
-        if response_content and response_content.text and quick_unclosed_check(response_content.text):
+        # 检测未闭合标签（仅在启用时检查）
+        if (settings.ENABLE_UNCLOSED_TAG_DETECTION and 
+            response_content and response_content.text and 
+            quick_unclosed_check(response_content.text)):
             log('warning', f"检测到未闭合标签，需要重试",
                 extra={'key': api_key[:8], 'request_type': 'fake-stream', 'model': chat_request.model})
             return "unclosed_tags"

@@ -16,8 +16,8 @@ const localConfig = reactive({
   concurrentRequests: 1, // Default to 1 or a sensible minimum
   increaseConcurrentOnFailure: 0,
   maxConcurrentRequests: 1, // Default to 1 or a sensible minimum
-  maxEmptyResponses: 0,
   logUpstreamResponses: false, // 新增日志配置
+  enableUncloseTagDetection: true, // 未闭合标签检测开关
   ignorableTags: '' // 可忽略标签配置
 })
 
@@ -44,7 +44,7 @@ watch(
     storeConcurrentRequests: dashboardStore.config.concurrentRequests,
     storeIncreaseConcurrentOnFailure: dashboardStore.config.increaseConcurrentOnFailure,
     storeMaxConcurrentRequests: dashboardStore.config.maxConcurrentRequests,
-    storeMaxEmptyResponses: dashboardStore.config.maxEmptyResponses,
+    storeEnableUncloseTagDetection: dashboardStore.config.enableUncloseTagDetection,
     storeIgnorableTags: dashboardStore.config.ignorableTags,
     configIsActuallyLoaded: dashboardStore.isConfigLoaded, // 观察加载状态
   }),
@@ -60,7 +60,7 @@ watch(
       localConfig.concurrentRequests = newValues.storeConcurrentRequests;
       localConfig.increaseConcurrentOnFailure = newValues.storeIncreaseConcurrentOnFailure;
       localConfig.maxConcurrentRequests = newValues.storeMaxConcurrentRequests;
-      localConfig.maxEmptyResponses = newValues.storeMaxEmptyResponses;
+      localConfig.enableUncloseTagDetection = newValues.storeEnableUncloseTagDetection;
       localConfig.ignorableTags = newValues.storeIgnorableTags || '';
       populatedFromStore.value = true;
     }
@@ -277,6 +277,21 @@ defineExpose({
         </div>
       </div>
       
+      <!-- 未闭合标签检测开关 -->
+      <div class="config-row">
+        <div class="config-group">
+          <label class="config-label">未闭合标签检测</label>
+          <div class="toggle-wrapper">
+            <input type="checkbox" class="toggle" id="enableUncloseTagDetection" v-model="localConfig.enableUncloseTagDetection">
+            <label for="enableUncloseTagDetection" class="toggle-label">
+              <span class="toggle-text">{{ getBooleanText(localConfig.enableUncloseTagDetection) }}</span>
+            </label>
+          </div>
+        </div>
+        <div class="config-group"></div>
+        <div class="config-group"></div>
+      </div>
+      
       <!-- 可忽略标签配置 -->
       <div class="config-row">
         <div class="config-group full-width">
@@ -286,8 +301,9 @@ defineExpose({
             class="config-input" 
             v-model="localConfig.ignorableTags" 
             placeholder="请输入逗号分隔的标签名，如：think,thinking,assess,details"
+            :disabled="!localConfig.enableUncloseTagDetection"
           >
-          <small class="config-help">这些标签内的未闭合标签将被忽略，不会触发重试</small>
+          <small class="config-help">这些标签内的未闭合标签将被忽略，不会触发重试（仅当未闭合标签检测启用时生效）</small>
         </div>
       </div>
       
@@ -358,21 +374,6 @@ defineExpose({
         </div>
       </div>
       
-      <!-- 数值配置项第三行 -->
-      <div class="config-row">
-        <div class="config-group">
-          <label class="config-label">空响应重试限制</label>
-          <input 
-            type="number" 
-            class="config-input" 
-            v-model.number="localConfig.maxEmptyResponses" 
-            min="0"
-          >
-        </div>
-        <!-- 可以根据需要在此行添加更多配置项 -->
-        <div class="config-group"></div>
-        <div class="config-group"></div>
-      </div>
 
       <!-- 移除独立的保存区域 -->
       <!-- 消息提示由父组件处理 -->
@@ -452,6 +453,20 @@ defineExpose({
   outline: none;
   border-color: var(--button-primary);
   box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.config-input:disabled {
+  opacity: 0.6;
+  background-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.config-help {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
 }
 
 /* 开关样式 */
