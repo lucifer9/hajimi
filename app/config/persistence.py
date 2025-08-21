@@ -76,7 +76,12 @@ def merge_list_config(env_value, json_value, separator=','):
     # 从JSON解析
     json_items = []
     if json_value:
-        json_items = [item.strip() for item in json_value.split(separator) if item.strip()]
+        if isinstance(json_value, list):
+            # 如果json_value已经是列表，直接使用
+            json_items = [str(item).strip() for item in json_value if str(item).strip()]
+        else:
+            # 如果json_value是字符串，按分隔符分割
+            json_items = [item.strip() for item in json_value.split(separator) if item.strip()]
     
     # 合并去重，保持顺序
     all_items = []
