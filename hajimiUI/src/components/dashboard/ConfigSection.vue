@@ -123,14 +123,14 @@ async function handleSaveAllConfigs() {
     } else if (successes.length > 0 && errors.length > 0) {
       overallSuccessMsg.value = '部分配置已保存: ' + successes.join('; ') + '. 部分失败.'
     }
-    
-    // Do not clear password after save attempt
 
   } catch (error) {
     // This catch block might be redundant if children handle their errors and return status
     overallErrorMsg.value = error.message || '保存过程中发生意外错误'
   } finally {
     isOverallSaving.value = false
+    // 保存完成后清空密码字段（无论成功或失败）
+    sharedPassword.value = ''
   }
 }
 
