@@ -13,7 +13,8 @@ from app.vertex.message_processing import parse_gemini_response_for_reasoning_an
 from app.vertex.models import OpenAIRequest, OpenAIMessage # Changed from relative
 from app.vertex.message_processing import deobfuscate_text, convert_to_openai_format, convert_chunk_to_openai, create_final_chunk # Changed from relative
 import app.vertex.config as app_config # Changed from relative
-from app.config import settings # 导入settings模块
+from app.utils.content_validator import has_unclosed_tags, has_missing_or_unclosed_required_tags
+import app.config.settings as settings # 导入settings模块，与content_validator保持一致
 
 def create_openai_error_response(status_code: int, message: str, error_type: str) -> Dict[str, Any]:
     return {
@@ -205,6 +206,14 @@ async def gemini_fake_stream_generator(
 
         final_reasoning_text = _process_gemini_text_if_needed(separated_reasoning_text, request_obj.model)
         final_actual_content_text = _process_gemini_text_if_needed(separated_actual_content_text, request_obj.model)
+
+        # Validate content before proceeding with fake streaming
+        content_to_validate = final_actual_content_text
+        if content_to_validate:
+            if has_unclosed_tags(content_to_validate):
+                raise ValueError("Response contains unclosed tags according to SPECIFIC_TAGS_TO_CHECK configuration")
+            if has_missing_or_unclosed_required_tags(content_to_validate):
+                raise ValueError("Response is missing required tags according to REQUIRED_TAGS configuration")
 
         # Define block checking for the raw response
         def _check_gemini_block_wrapper(response_to_check: Any):

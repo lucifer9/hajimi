@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from typing import List, Dict, Any
 
 from app.utils.logging import vertex_log
-from app.config import settings
+import app.config.settings as settings
 
 # Google and OpenAI specific imports
 from google.genai import types
@@ -31,6 +31,7 @@ from app.vertex.api_helpers import (
     create_openai_error_response,
     execute_gemini_call
 )
+from app.utils.content_validator import has_unclosed_tags, has_missing_or_unclosed_required_tags
 
 router = APIRouter()
 
@@ -211,7 +212,6 @@ async def chat_completions(fastapi_request: Request, request: OpenAIRequest, api
 
             PROJECT_ID = rotated_project_id
             LOCATION = "global" # Fixed as per user confirmation
-            import app.config.settings as settings
             VERTEX_AI_OPENAI_ENDPOINT_URL = (
                 f"{settings.VERTEX_API_BASE_URL}/v1beta1/"
                 f"projects/{PROJECT_ID}/locations/{LOCATION}/endpoints/openapi"
@@ -629,6 +629,15 @@ async def openai_fake_stream_generator(
 
     try:
         full_api_response, separated_reasoning_text, separated_actual_content_text = await temp_task_for_keepalive_check
+        
+        # Validate content before proceeding with fake streaming
+        content_to_validate = separated_actual_content_text
+        if content_to_validate:
+            if has_unclosed_tags(content_to_validate):
+                raise ValueError("Response contains unclosed tags according to SPECIFIC_TAGS_TO_CHECK configuration")
+            if has_missing_or_unclosed_required_tags(content_to_validate):
+                raise ValueError("Response is missing required tags according to REQUIRED_TAGS configuration")
+        
         def _extract_openai_full_text(response: Any) -> str: 
             if response.choices and response.choices[0].message and response.choices[0].message.content is not None:
                 return response.choices[0].message.content

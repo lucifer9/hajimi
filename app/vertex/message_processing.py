@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Union, Literal, Tuple # Optional removed
 from google.genai import types
 from app.vertex.models import OpenAIMessage, ContentPartText, ContentPartImage # Changed from relative
 from app.utils.logging import vertex_log
+from app.utils.content_validator import has_unclosed_tags, has_missing_or_unclosed_required_tags
 
 # Define supported roles for Gemini API
 SUPPORTED_ROLES = ["user", "model"]
@@ -395,6 +396,14 @@ def convert_to_openai_format(gemini_response, model: str) -> Dict[str, Any]:
                 final_reasoning_content_str = deobfuscate_text(final_reasoning_content_str)
                 final_normal_content_str = deobfuscate_text(final_normal_content_str)
 
+            # Validate content before creating OpenAI response
+            content_to_validate = final_normal_content_str
+            if content_to_validate:
+                if has_unclosed_tags(content_to_validate):
+                    raise ValueError("Response contains unclosed tags according to SPECIFIC_TAGS_TO_CHECK configuration")
+                if has_missing_or_unclosed_required_tags(content_to_validate):
+                    raise ValueError("Response is missing required tags according to REQUIRED_TAGS configuration")
+
             message_payload = {"role": "assistant", "content": final_normal_content_str}
             if final_reasoning_content_str:
                 message_payload['reasoning_content'] = final_reasoning_content_str
@@ -406,6 +415,14 @@ def convert_to_openai_format(gemini_response, model: str) -> Dict[str, Any]:
             
     elif hasattr(gemini_response, 'text') and gemini_response.text is not None:
          content_str = deobfuscate_text(gemini_response.text) if is_encrypt_full else (gemini_response.text or "")
+         
+         # Validate content before creating OpenAI response
+         if content_str:
+             if has_unclosed_tags(content_str):
+                 raise ValueError("Response contains unclosed tags according to SPECIFIC_TAGS_TO_CHECK configuration")
+             if has_missing_or_unclosed_required_tags(content_str):
+                 raise ValueError("Response is missing required tags according to REQUIRED_TAGS configuration")
+         
          choices.append({"index": 0, "message": {"role": "assistant", "content": content_str}, "finish_reason": "stop"})
     else: 
          choices.append({"index": 0, "message": {"role": "assistant", "content": ""}, "finish_reason": "stop"})
